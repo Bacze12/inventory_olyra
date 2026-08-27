@@ -7,6 +7,7 @@ import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
+import '../../services/update_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
+      UpdateService.checkAndApplyUpdate(context);
     });
   }
 
