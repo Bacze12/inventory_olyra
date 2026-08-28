@@ -51,7 +51,7 @@
             android:value="2" />
             <!-- CONFIGURACIÓN REQUERIDA PARA OTA_UPDATE -->
         <provider
-            android:name="sk.khronos.ota_update.OtaUpdateFileProvider"
+            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
             android:authorities="${applicationId}.ota_update_provider"
             android:exported="false"
             android:grantUriPermissions="true">

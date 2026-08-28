@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
@@ -22,7 +23,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
-      UpdateService.checkAndApplyUpdate(context);
+      UpdateService.checkForUpdates(
+        context,
+        context.read<SettingsRepository>(),
+      );
     });
   }
 
