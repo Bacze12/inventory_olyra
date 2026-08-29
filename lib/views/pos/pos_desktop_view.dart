@@ -9,9 +9,12 @@ import 'package:provider/provider.dart';
 import '../../core/audio/sound_feedback.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
+import '../../data/models/sale.dart';
 import '../../data/repositories/movement_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../features/products/product_provider.dart';
+import '../../features/sales/sales_provider.dart';
+import '../sales/sales_history_view.dart';
 import 'cart_item.dart';
 import 'cart_provider.dart';
 
@@ -130,6 +133,8 @@ class _PosDesktopViewState extends State<PosDesktopView> {
   Future<void> _openCheckout() async {
     final messenger = ScaffoldMessenger.of(context);
     final cart = context.read<CartProvider>();
+    final salesProvider = context.read<SalesProvider>();
+    final productProvider = context.read<ProductProvider>();
 
     if (cart.isEmpty) {
       messenger
@@ -153,16 +158,19 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     }
 
     final items = List<CartItem>.from(cart.items);
-    setState(() => _checkoutOpen = true);
+    final subtotal = cart.subtotal;
+    final tax = cart.tax;
+    final taxRate = cart.taxRate;
     final total = cart.total;
-    final ok = await showDialog<bool>(
+    setState(() => _checkoutOpen = true);
+    final result = await showDialog<_CheckoutResult>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => _CheckoutDialog(cart: cart),
     );
     setState(() => _checkoutOpen = false);
     if (!mounted) return;
-    if (ok != true) {
+    if (result == null) {
       _searchFocus.requestFocus();
       return;
     }
@@ -181,14 +189,28 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     }
     if (!mounted) return;
 
+    // Persiste la venta en el historial.
+    final saleId = await salesProvider.registrarVenta(
+          items: items,
+          method: result.method,
+          subtotal: subtotal,
+          taxRate: taxRate,
+          tax: tax,
+          total: total,
+          received: result.received,
+          change: result.change,
+        );
+
     cart.clearCart();
-    context.read<ProductProvider>().load();
+    productProvider.load();
     unawaited(SoundFeedback.operation());
     _searchFocus.requestFocus();
 
-    final message = errors.isEmpty
-        ? 'Venta registrada · ${formatMoney(total)}'
-        : 'Venta con errores en: ${errors.join(', ')}';
+    final message = saleId == null
+        ? 'Venta no registrada en el historial · ${formatMoney(total)}'
+        : errors.isEmpty
+            ? 'Venta registrada · ${formatMoney(total)}'
+            : 'Venta con errores en stock: ${errors.join(', ')}';
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
@@ -259,6 +281,18 @@ class _PosDesktopViewState extends State<PosDesktopView> {
             ),
             title: const Text('Punto de venta'),
             actions: [
+              TextButton.icon(
+                onPressed: () {
+                  _searchFocus.unfocus();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SalesHistoryView(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: const Text('Ver Ventas'),
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: Center(
@@ -987,19 +1021,80 @@ class _MoneyRow extends StatelessWidget {
   }
 }
 
-class _CheckoutDialog extends StatelessWidget {
+/// Resultado del cobro confirmado: método de pago y montos.
+class _CheckoutResult {
+  const _CheckoutResult({
+    required this.method,
+    required this.received,
+    required this.change,
+  });
+
+  final PaymentMethod method;
+  final double received;
+  final double change;
+}
+
+class _CheckoutDialog extends StatefulWidget {
   const _CheckoutDialog({required this.cart});
 
   final CartProvider cart;
 
   @override
+  State<_CheckoutDialog> createState() => _CheckoutDialogState();
+}
+
+class _CheckoutDialogState extends State<_CheckoutDialog> {
+  late PaymentMethod _method;
+  late final TextEditingController _receivedController;
+
+  double get _total => widget.cart.total;
+
+  double get _received =>
+      double.tryParse(_receivedController.text.replaceAll(',', '.')) ?? 0;
+
+  double get _change =>
+      _method == PaymentMethod.efectivo && _received >= _total
+          ? _received - _total
+          : 0;
+
+  bool get _insufficient =>
+      _method == PaymentMethod.efectivo && _received < _total;
+
+  @override
+  void initState() {
+    super.initState();
+    _method = PaymentMethod.efectivo;
+    // El monto recibido se pre-carga redondeando hacia arriba para agilizar
+    // el cobro en efectivo.
+    _receivedController =
+        TextEditingController(text: _total.ceilToDouble().toString());
+  }
+
+  @override
+  void dispose() {
+    _receivedController.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    Navigator.of(context).pop(
+      _CheckoutResult(
+        method: _method,
+        received: _method == PaymentMethod.efectivo ? _received : _total,
+        change: _change,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final cart = widget.cart;
 
     return AlertDialog(
       title: const Text('Finalizar venta'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 420),
+        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 520),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1010,31 +1105,32 @@ class _CheckoutDialog extends StatelessWidget {
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: cart.items
-                      .map((item) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${item.product.name} × ${item.quantity}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                  children: [
+                    for (final item in cart.items)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item.product.name} × ${item.quantity}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                formatMoney(item.subtotal),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontFeatures: [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
+                            ),
+                            Text(
+                              formatMoney(item.subtotal),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
-                            ],
-                          ),
-                        ))
-                    .toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1053,27 +1149,79 @@ class _CheckoutDialog extends StatelessWidget {
                   'TOTAL',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                 ),
-                Text(
-                  formatMoney(cart.total),
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: scheme.primary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      formatMoney(_total),
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.primary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            SegmentedButton<PaymentMethod>(
+              segments: const [
+                ButtonSegment(
+                  value: PaymentMethod.efectivo,
+                  icon: Icon(Icons.payments_outlined),
+                  label: Text('Efectivo'),
+                ),
+                ButtonSegment(
+                  value: PaymentMethod.tarjeta,
+                  icon: Icon(Icons.credit_card),
+                  label: Text('Tarjeta'),
+                ),
+              ],
+              selected: {_method},
+              onSelectionChanged: (selection) =>
+                  setState(() => _method = selection.first),
+            ),
+            if (_method == PaymentMethod.efectivo) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _receivedController,
+                onChanged: (_) => setState(() {}),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  LengthLimitingTextInputFormatter(12),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Recibido de',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  prefixText: '\$ ',
+                ),
+              ),
+              const SizedBox(height: 6),
+              _MoneyRow(label: 'Vuelto', value: _change),
+              if (_insufficient) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Falta dinero: necesitas al menos ${formatMoney(_total)}',
+                  style: TextStyle(color: scheme.error, fontSize: 12),
+                ),
+              ],
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: _insufficient ? null : _confirm,
           child: const Text('Confirmar venta'),
         ),
       ],

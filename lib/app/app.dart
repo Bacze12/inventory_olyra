@@ -5,10 +5,12 @@ import '../core/constants/app_constants.dart';
 import '../data/database/app_database.dart';
 import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
+import '../data/repositories/sales_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
+import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
 import '../views/pos/cart_provider.dart';
 import 'theme/app_theme.dart';
@@ -28,6 +30,15 @@ class InventarioApp extends StatelessWidget {
         ),
         Provider<SettingsRepository>(
           create: (_) => SettingsRepository(AppDatabase.instance),
+        ),
+        Provider<SalesRepository>(
+          create: (_) => SalesRepository(AppDatabase.instance),
+        ),
+        ChangeNotifierProvider<SalesProvider>(
+          create: (ctx) => SalesProvider(
+            salesRepository: ctx.read<SalesRepository>(),
+            movementRepository: ctx.read<MovementRepository>(),
+          ),
         ),
         ChangeNotifierProvider<ProductProvider>(
           create: (ctx) =>
