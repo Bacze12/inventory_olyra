@@ -1,8 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../views/pairing/desktop_pairing_view.dart';
+import '../../views/pairing/mobile_scan_pairing_view.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
@@ -11,6 +16,11 @@ import '../scanner/scanner_screen.dart';
 import '../../services/update_service.dart';
 import '../../views/pos/pos_desktop_view.dart';
 import '../../views/sales/sales_history_view.dart';
+
+bool _isDesktop() {
+  if (kIsWeb) return false;
+  return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -119,6 +129,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.devices,
+            title: 'Vincular dispositivo',
+            subtitle: 'Emparejar esta PC con un celular (QR / PIN)',
+            onTap: () => _push(
+              context,
+              _isDesktop()
+                  ? const DesktopPairingView()
+                  : const MobileScanPairingView(),
+            ),
           ),
         ],
       ),

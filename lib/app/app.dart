@@ -7,6 +7,7 @@ import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import '../data/repositories/settings_repository.dart';
+import '../data/services/pairing_service.dart';
 import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
@@ -30,6 +31,11 @@ class InventarioApp extends StatelessWidget {
         ),
         Provider<SettingsRepository>(
           create: (_) => SettingsRepository(AppDatabase.instance),
+        ),
+        Provider<PairingService>(
+          create: (ctx) => PairingService(
+            settings: DbPairingSettingsSource(ctx.read<SettingsRepository>()),
+          ),
         ),
         Provider<SalesRepository>(
           create: (_) => SalesRepository(AppDatabase.instance),
