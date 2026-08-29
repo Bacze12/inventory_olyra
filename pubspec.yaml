@@ -40,6 +40,8 @@ dependencies:
   http: ^1.6.0
   ota_update: ^7.1.0
   package_info_plus: ^10.2.1
+  sqflite_common_ffi: ^2.4.2+1
+  sqlite3_flutter_libs: ^0.6.0+eol
 
 dev_dependencies:
   flutter_test:

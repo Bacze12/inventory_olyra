@@ -5,6 +5,8 @@ class Product {
     required this.barcode,
     required this.quantity,
     required this.minStock,
+    this.price = 0.0,
+    this.imagePath,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -14,6 +16,8 @@ class Product {
   final String barcode;
   final int quantity;
   final int minStock;
+  final double price;
+  final String? imagePath;
   final String createdAt;
   final String updatedAt;
 
@@ -27,6 +31,8 @@ class Product {
         barcode: map['barcode'] as String,
         quantity: map['quantity'] as int,
         minStock: map['min_stock'] as int,
+        price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        imagePath: map['image_path'] as String?,
         createdAt: map['created_at'] as String,
         updatedAt: map['updated_at'] as String,
       );
@@ -37,6 +43,8 @@ class Product {
         'barcode': barcode,
         'quantity': quantity,
         'min_stock': minStock,
+        'price': price,
+        'image_path': imagePath,
         'created_at': createdAt,
         'updated_at': updatedAt,
       };
@@ -47,6 +55,8 @@ class Product {
     String? barcode,
     int? quantity,
     int? minStock,
+    double? price,
+    String? imagePath,
     String? createdAt,
     String? updatedAt,
   }) =>
@@ -56,6 +66,8 @@ class Product {
         barcode: barcode ?? this.barcode,
         quantity: quantity ?? this.quantity,
         minStock: minStock ?? this.minStock,
+        price: price ?? this.price,
+        imagePath: imagePath ?? this.imagePath,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
