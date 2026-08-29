@@ -9,6 +9,7 @@ import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
 import '../../services/update_service.dart';
+import '../../views/pos/pos_desktop_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -60,6 +61,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
           ],
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.point_of_sale,
+            title: 'Punto de venta',
+            subtitle: 'Venta rápida en PC · F12 para cobrar',
+            onTap: () => _push(context, const PosDesktopView()),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(

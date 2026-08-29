@@ -27,6 +27,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final TextEditingController _barcodeController;
   late final TextEditingController _quantityController;
   late final TextEditingController _minStockController;
+  late final TextEditingController _priceController;
 
   bool _saving = false;
 
@@ -44,6 +45,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _minStockController = TextEditingController(
       text: product?.minStock.toString() ?? '0',
     );
+    _priceController = TextEditingController(
+      text: product?.price.toStringAsFixed(2) ?? '',
+    );
   }
 
   @override
@@ -52,6 +56,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _barcodeController.dispose();
     _quantityController.dispose();
     _minStockController.dispose();
+    _priceController.dispose();
     super.dispose();
   }
 
@@ -88,6 +93,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   )),
                 ],
               ),
+              const SizedBox(height: 16),
+              _priceField(),
               const SizedBox(height: 28),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
@@ -159,6 +166,29 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         },
       );
 
+  Widget _priceField() => TextFormField(
+        controller: _priceController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'^\d{0,9}([.,]\d{0,2})?')),
+        ],
+        decoration: const InputDecoration(
+          labelText: 'Precio',
+          hintText: '0.00',
+          prefixIcon: Icon(Icons.attach_money_outlined),
+        ),
+        validator: (value) {
+          final parsed = _parsePrice(value);
+          if (parsed == null || parsed < 0) return 'Precio inválido';
+          return null;
+        },
+      );
+
+  double? _parsePrice(String? value) {
+    if (value == null || value.trim().isEmpty) return 0.0;
+    return double.tryParse(value.trim().replaceAll(',', '.'));
+  }
+
   Future<void> _scanBarcode() async {
     final messenger = ScaffoldMessenger.of(context);
     final code = await Navigator.of(context).push<String>(
@@ -187,6 +217,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       barcode: normalizeBarcode(_barcodeController.text),
       quantity: int.tryParse(_quantityController.text) ?? 0,
       minStock: int.tryParse(_minStockController.text) ?? 0,
+      price: _parsePrice(_priceController.text) ?? 0.0,
       createdAt: base?.createdAt ?? now,
       updatedAt: now,
     );

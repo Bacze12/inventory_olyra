@@ -10,6 +10,7 @@ import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
 import '../features/scanner/scanner_provider.dart';
+import '../views/pos/cart_provider.dart';
 import 'theme/app_theme.dart';
 
 class InventarioApp extends StatelessWidget {
@@ -37,6 +38,9 @@ class InventarioApp extends StatelessWidget {
             productRepository: ctx.read<ProductRepository>(),
             movementRepository: ctx.read<MovementRepository>(),
           ),
+        ),
+        ChangeNotifierProvider<CartProvider>(
+          create: (_) => CartProvider(),
         ),
         ChangeNotifierProvider<ReportProvider>(
           create: (ctx) => ReportProvider(
