@@ -6,7 +6,7 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._internal();
 
-  static const int _version = 2;
+  static const int _version = 3;
 
   Database? _database;
 
@@ -36,6 +36,40 @@ class AppDatabase {
           'ALTER TABLE products ADD COLUMN price REAL NOT NULL DEFAULT 0.0');
       await db.execute(
           'ALTER TABLE products ADD COLUMN image_path TEXT');
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE sales (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          payment_method TEXT NOT NULL DEFAULT 'Efectivo'
+            CHECK(payment_method IN ('Efectivo', 'Tarjeta')),
+          subtotal REAL NOT NULL DEFAULT 0.0,
+          tax_rate REAL NOT NULL DEFAULT 0.0,
+          tax_amount REAL NOT NULL DEFAULT 0.0,
+          total REAL NOT NULL DEFAULT 0.0,
+          received REAL,
+          change REAL NOT NULL DEFAULT 0.0,
+          status TEXT NOT NULL DEFAULT 'Completada'
+            CHECK(status IN ('Completada', 'Anulada')),
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE sale_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sale_id INTEGER NOT NULL,
+          product_id INTEGER,
+          product_name TEXT NOT NULL,
+          barcode TEXT,
+          unit_price REAL NOT NULL DEFAULT 0.0,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          subtotal REAL NOT NULL DEFAULT 0.0,
+          FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_sales_created ON sales(created_at)');
+      await db.execute('CREATE INDEX idx_sale_items_sale ON sale_items(sale_id)');
     }
   }
 
@@ -76,5 +110,39 @@ class AppDatabase {
         value TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_method TEXT NOT NULL DEFAULT 'Efectivo'
+          CHECK(payment_method IN ('Efectivo', 'Tarjeta')),
+        subtotal REAL NOT NULL DEFAULT 0.0,
+        tax_rate REAL NOT NULL DEFAULT 0.0,
+        tax_amount REAL NOT NULL DEFAULT 0.0,
+        total REAL NOT NULL DEFAULT 0.0,
+        received REAL,
+        change REAL NOT NULL DEFAULT 0.0,
+        status TEXT NOT NULL DEFAULT 'Completada'
+          CHECK(status IN ('Completada', 'Anulada')),
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_sales_created ON sales(created_at)');
+
+    await db.execute('''
+      CREATE TABLE sale_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        product_id INTEGER,
+        product_name TEXT NOT NULL,
+        barcode TEXT,
+        unit_price REAL NOT NULL DEFAULT 0.0,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        subtotal REAL NOT NULL DEFAULT 0.0,
+        FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_sale_items_sale ON sale_items(sale_id)');
   }
 }

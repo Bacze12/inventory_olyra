@@ -6,7 +6,9 @@ import 'package:scanflow/data/database/app_database.dart';
 import 'package:scanflow/data/models/product.dart';
 import 'package:scanflow/data/repositories/movement_repository.dart';
 import 'package:scanflow/data/repositories/product_repository.dart';
+import 'package:scanflow/data/repositories/sales_repository.dart';
 import 'package:scanflow/features/products/product_provider.dart';
+import 'package:scanflow/features/sales/sales_provider.dart';
 import 'package:scanflow/views/pos/cart_provider.dart';
 import 'package:scanflow/views/pos/pos_desktop_view.dart';
 
@@ -30,8 +32,17 @@ Widget _buildApp() {
       Provider<MovementRepository>(
         create: (_) => MovementRepository(AppDatabase.instance),
       ),
+      Provider<SalesRepository>(
+        create: (_) => SalesRepository(AppDatabase.instance),
+      ),
       ChangeNotifierProvider<ProductProvider>(
         create: (ctx) => ProductProvider(ctx.read<ProductRepository>()),
+      ),
+      ChangeNotifierProvider<SalesProvider>(
+        create: (ctx) => SalesProvider(
+          salesRepository: ctx.read<SalesRepository>(),
+          movementRepository: ctx.read<MovementRepository>(),
+        ),
       ),
       ChangeNotifierProvider<CartProvider>(
         create: (_) => CartProvider(),
