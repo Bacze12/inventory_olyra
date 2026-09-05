@@ -1,6 +1,8 @@
 enum PaymentMethod {
   efectivo('Efectivo'),
-  tarjeta('Tarjeta');
+  tarjeta('Tarjeta'),
+  debito('Débito'),
+  transferencia('Transferencia');
 
   const PaymentMethod(this.label);
 
@@ -8,9 +10,15 @@ enum PaymentMethod {
 
   String get dbValue => label;
 
-  static PaymentMethod fromDb(String value) => value == 'Tarjeta'
-      ? PaymentMethod.tarjeta
-      : PaymentMethod.efectivo;
+  static PaymentMethod fromDb(String value) => switch (value) {
+        'Efectivo' => PaymentMethod.efectivo,
+        'Tarjeta' => PaymentMethod.tarjeta,
+        'Débito' => PaymentMethod.debito,
+        'Transferencia' => PaymentMethod.transferencia,
+        _ => PaymentMethod.efectivo,
+      };
+
+  bool get isCash => this == PaymentMethod.efectivo;
 }
 
 enum SaleStatus {
@@ -45,6 +53,7 @@ class Sale {
     this.deviceToken,
     this.synced = false,
     this.stockWarning = false,
+    this.shiftId,
   });
 
   final int? id;
@@ -69,6 +78,9 @@ class Sale {
   /// en la PC (sync offline-first): se avisa en el historial sin bloquear.
   final bool stockWarning;
 
+  /// Turno de caja en el que se registró la venta (arqueo de caja).
+  final int? shiftId;
+
   bool get canBeAnnulled => status == SaleStatus.completada;
 
   /// Folio legible, ej. `#0042`.
@@ -88,6 +100,7 @@ class Sale {
         deviceToken: map['device_token'] as String?,
         synced: (map['synced'] as int? ?? 0) != 0,
         stockWarning: (map['stock_warning'] as int? ?? 0) != 0,
+        shiftId: map['shift_id'] as int?,
       );
 
   Sale copyWith({
@@ -96,6 +109,7 @@ class Sale {
     String? deviceToken,
     bool? synced,
     bool? stockWarning,
+    int? shiftId,
   }) =>
       Sale(
         id: id,
@@ -112,6 +126,7 @@ class Sale {
         deviceToken: deviceToken ?? this.deviceToken,
         synced: synced ?? this.synced,
         stockWarning: stockWarning ?? this.stockWarning,
+        shiftId: shiftId ?? this.shiftId,
       );
 }
 

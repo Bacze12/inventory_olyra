@@ -25,6 +25,7 @@ class SalesRepository {
     SaleStatus status = SaleStatus.completada,
     String? createdAt,
     bool stockWarning = false,
+    int? shiftId,
   }) async {
     final db = await _db.database;
     return db.transaction((txn) async {
@@ -41,6 +42,7 @@ class SalesRepository {
         'device_token': deviceToken,
         'synced': 0,
         'stock_warning': stockWarning ? 1 : 0,
+        'shift_id': shiftId,
         'created_at': now,
       });
       for (final item in items) {

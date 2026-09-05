@@ -12,8 +12,10 @@ import '../../data/models/product.dart';
 import '../../data/models/sale.dart';
 import '../../data/repositories/movement_repository.dart';
 import '../../data/repositories/product_repository.dart';
+import '../../features/cash/cash_provider.dart';
 import '../../features/products/product_provider.dart';
 import '../../features/sales/sales_provider.dart';
+import '../cash/cash_shift_dialog.dart';
 import '../sales/sales_history_view.dart';
 import 'cart_item.dart';
 import 'cart_provider.dart';
@@ -48,6 +50,7 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<ProductProvider>().load();
+      context.read<CashProvider>().load();
       _searchFocus.requestFocus();
     });
   }
@@ -162,6 +165,23 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     final tax = cart.tax;
     final taxRate = cart.taxRate;
     final total = cart.total;
+
+    // Bloqueo de caja: sin un turno abierto no se puede cobrar. Se ofrece
+    // abrir con el fondo inicial antes de mostrar el modal de cobro.
+    final cash = context.read<CashProvider>();
+    if (!cash.isLoaded) await cash.load();
+    if (!mounted) return;
+    if (!cash.isOpen) {
+      final opened = await showCashOpenDialog(context);
+      if (!mounted) return;
+      if (!opened) {
+        _searchFocus.requestFocus();
+        return;
+      }
+    }
+    if (!mounted) return;
+    final shiftId = context.read<CashProvider>().shift?.id;
+
     setState(() => _checkoutOpen = true);
     final result = await showDialog<_CheckoutResult>(
       context: context,
@@ -199,6 +219,7 @@ class _PosDesktopViewState extends State<PosDesktopView> {
           total: total,
           received: result.received,
           change: result.change,
+          shiftId: shiftId,
         );
 
     cart.clearCart();
@@ -248,10 +269,18 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     _searchFocus.requestFocus();
   }
 
+  /// Abre el panel de caja (turno actual, desglose, cierre con cuadre).
+  Future<void> _openCashPanel() async {
+    _searchFocus.unfocus();
+    await showCashPanelDialog(context);
+    _searchFocus.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<ProductProvider>();
     final cart = context.watch<CartProvider>();
+    final cash = context.watch<CashProvider>();
 
     final query = _query.trim().toLowerCase();
     final products = catalog.products.where((product) {
@@ -281,6 +310,20 @@ class _PosDesktopViewState extends State<PosDesktopView> {
             ),
             title: const Text('Punto de venta'),
             actions: [
+              IconButton(
+                tooltip: cash.isOpen
+                    ? 'Turno de caja abierto'
+                    : 'Caja cerrada · abrir turno',
+                icon: Icon(
+                  cash.isOpen
+                      ? Icons.savings_outlined
+                      : Icons.lock_outline,
+                  color: cash.isOpen
+                      ? Colors.green.shade700
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                onPressed: _openCashPanel,
+              ),
               TextButton.icon(
                 onPressed: () {
                   _searchFocus.unfocus();
@@ -1167,22 +1210,31 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
               ],
             ),
             const SizedBox(height: 16),
-            SegmentedButton<PaymentMethod>(
-              segments: const [
-                ButtonSegment(
-                  value: PaymentMethod.efectivo,
-                  icon: Icon(Icons.payments_outlined),
-                  label: Text('Efectivo'),
-                ),
-                ButtonSegment(
-                  value: PaymentMethod.tarjeta,
-                  icon: Icon(Icons.credit_card),
-                  label: Text('Tarjeta'),
-                ),
-              ],
-              selected: {_method},
-              onSelectionChanged: (selection) =>
-                  setState(() => _method = selection.first),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final method in PaymentMethod.values) ...[
+                    if (method != PaymentMethod.values.first)
+                      const SizedBox(width: 8),
+                    ChoiceChip(
+                      avatar: Icon(
+                        switch (method) {
+                          PaymentMethod.efectivo => Icons.payments_outlined,
+                          PaymentMethod.debito => Icons.credit_card,
+                          PaymentMethod.tarjeta => Icons.credit_card,
+                          PaymentMethod.transferencia =>
+                            Icons.currency_exchange,
+                        },
+                        size: 18,
+                      ),
+                      label: Text(method.label),
+                      selected: _method == method,
+                      onSelected: (_) => setState(() => _method = method),
+                    ),
+                  ],
+                ],
+              ),
             ),
             if (_method == PaymentMethod.efectivo) ...[
               const SizedBox(height: 12),

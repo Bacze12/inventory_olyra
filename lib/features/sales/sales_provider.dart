@@ -115,6 +115,7 @@ class SalesProvider extends ChangeNotifier {
     required double total,
     double? received,
     required double change,
+    int? shiftId,
   }) async {
     try {
       final saleItems = [
@@ -137,6 +138,7 @@ class SalesProvider extends ChangeNotifier {
         total: total,
         received: received,
         change: change,
+        shiftId: shiftId,
       );
     } catch (_) {
       return null;

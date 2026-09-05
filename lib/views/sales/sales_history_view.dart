@@ -265,9 +265,12 @@ class _TableRow extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    sale.paymentMethod == PaymentMethod.tarjeta
-                        ? Icons.credit_card
-                        : Icons.payments_outlined,
+                    switch (sale.paymentMethod) {
+                      PaymentMethod.efectivo => Icons.payments_outlined,
+                      PaymentMethod.debito => Icons.credit_card,
+                      PaymentMethod.tarjeta => Icons.credit_card,
+                      PaymentMethod.transferencia => Icons.currency_exchange,
+                    },
                     size: 16,
                     color: scheme.onSurfaceVariant,
                   ),
@@ -361,9 +364,12 @@ class _SaleCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    sale.paymentMethod == PaymentMethod.tarjeta
-                        ? Icons.credit_card
-                        : Icons.payments_outlined,
+                    switch (sale.paymentMethod) {
+                      PaymentMethod.efectivo => Icons.payments_outlined,
+                      PaymentMethod.debito => Icons.credit_card,
+                      PaymentMethod.tarjeta => Icons.credit_card,
+                      PaymentMethod.transferencia => Icons.currency_exchange,
+                    },
                     size: 16,
                     color: scheme.onSurfaceVariant,
                   ),
