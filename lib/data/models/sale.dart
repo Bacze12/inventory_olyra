@@ -42,6 +42,9 @@ class Sale {
     required this.status,
     required this.createdAt,
     this.items = const [],
+    this.deviceToken,
+    this.synced = false,
+    this.stockWarning = false,
   });
 
   final int? id;
@@ -55,6 +58,16 @@ class Sale {
   final SaleStatus status;
   final String createdAt;
   final List<SaleItem> items;
+
+  /// Token del dispositivo que originó la venta (sincronización local).
+  final String? deviceToken;
+
+  /// Si ya fue enviada al servidor local de la PC (sincronización Wi-Fi).
+  final bool synced;
+
+  /// True si la venta se registró aunque algún producto no alcanzaba stock
+  /// en la PC (sync offline-first): se avisa en el historial sin bloquear.
+  final bool stockWarning;
 
   bool get canBeAnnulled => status == SaleStatus.completada;
 
@@ -72,9 +85,19 @@ class Sale {
         change: (map['change'] as num?)?.toDouble() ?? 0.0,
         status: SaleStatus.fromDb(map['status'] as String),
         createdAt: map['created_at'] as String,
+        deviceToken: map['device_token'] as String?,
+        synced: (map['synced'] as int? ?? 0) != 0,
+        stockWarning: (map['stock_warning'] as int? ?? 0) != 0,
       );
 
-  Sale copyWith({List<SaleItem>? items, SaleStatus? status}) => Sale(
+  Sale copyWith({
+    List<SaleItem>? items,
+    SaleStatus? status,
+    String? deviceToken,
+    bool? synced,
+    bool? stockWarning,
+  }) =>
+      Sale(
         id: id,
         paymentMethod: paymentMethod,
         subtotal: subtotal,
@@ -86,6 +109,9 @@ class Sale {
         status: status ?? this.status,
         createdAt: createdAt,
         items: items ?? this.items,
+        deviceToken: deviceToken ?? this.deviceToken,
+        synced: synced ?? this.synced,
+        stockWarning: stockWarning ?? this.stockWarning,
       );
 }
 

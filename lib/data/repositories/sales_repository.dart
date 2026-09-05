@@ -21,10 +21,14 @@ class SalesRepository {
     required double total,
     double? received,
     required double change,
+    String? deviceToken,
+    SaleStatus status = SaleStatus.completada,
+    String? createdAt,
+    bool stockWarning = false,
   }) async {
     final db = await _db.database;
     return db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = createdAt ?? DateTime.now().toIso8601String();
       final id = await txn.insert('sales', {
         'payment_method': method.dbValue,
         'subtotal': subtotal,
@@ -33,7 +37,10 @@ class SalesRepository {
         'total': total,
         'received': received,
         'change': change,
-        'status': SaleStatus.completada.dbValue,
+        'status': status.dbValue,
+        'device_token': deviceToken,
+        'synced': 0,
+        'stock_warning': stockWarning ? 1 : 0,
         'created_at': now,
       });
       for (final item in items) {
@@ -115,6 +122,57 @@ class SalesRepository {
       {'status': status.dbValue},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  /// True si ya existe una venta con el mismo origen (token), fecha y total.
+  /// Permite que el servidor de la PC ignore reenvíos del teléfono.
+  Future<bool> findRemoteDuplicate(
+    String deviceToken,
+    String createdAt,
+    double total,
+  ) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'sales',
+      where: 'device_token = ? AND created_at = ? AND total = ?',
+      whereArgs: [deviceToken, createdAt, total],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Ventas locales pendientes de enviar al servidor de la PC.
+  Future<List<Sale>> listForSync() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'sales',
+      where: 'synced = 0',
+      orderBy: 'id ASC',
+    );
+    final sales = <Sale>[];
+    for (final row in rows) {
+      final itemRows = await db.query(
+        'sale_items',
+        where: 'sale_id = ?',
+        whereArgs: [row['id']],
+        orderBy: 'id ASC',
+      );
+      final sale = Sale.fromMap(row);
+      sales.add(sale.copyWith(items: itemRows.map(SaleItem.fromMap).toList()));
+    }
+    return sales;
+  }
+
+  Future<void> markSynced(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await _db.database;
+    final placeholders = List.generate(ids.length, (_) => '?').join(',');
+    await db.update(
+      'sales',
+      {'synced': 1},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
     );
   }
 }

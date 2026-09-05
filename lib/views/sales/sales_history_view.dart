@@ -214,7 +214,7 @@ class _TableHeader extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 110,
+            width: 150,
             child: Text(
               'Estado',
               textAlign: TextAlign.center,
@@ -294,9 +294,16 @@ class _TableRow extends StatelessWidget {
               ),
             ),
             SizedBox(
-              width: 110,
-              child: Center(
-                child: _StatusChip(status: sale.status),
+              width: 150,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _StatusChip(status: sale.status),
+                  if (sale.stockWarning && !anulada) ...[
+                    const SizedBox(height: 4),
+                    const _StockWarningBadge(),
+                  ],
+                ],
               ),
             ),
             const SizedBox(width: 8),
@@ -380,6 +387,10 @@ class _SaleCard extends StatelessWidget {
               Row(
                 children: [
                   _StatusChip(status: sale.status),
+                  if (sale.stockWarning && !anulada) ...[
+                    const SizedBox(width: 8),
+                    const _StockWarningBadge(),
+                  ],
                   const Spacer(),
                   Text(
                     'Ver detalle',
@@ -421,6 +432,43 @@ class _StatusChip extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+}
+
+/// Aviso de stock insuficiente para ventas sincronizadas desde otro
+/// dispositivo: el descuento se aplicó pero el stock físico pudo verse corto.
+class _StockWarningBadge extends StatelessWidget {
+  const _StockWarningBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 12,
+            color: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Stock insuficiente',
+            style: TextStyle(
+              color: scheme.onTertiaryContainer,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

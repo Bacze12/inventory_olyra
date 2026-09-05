@@ -6,7 +6,7 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._internal();
 
-  static const int _version = 3;
+  static const int _version = 5;
 
   Database? _database;
 
@@ -71,6 +71,21 @@ class AppDatabase {
       await db.execute('CREATE INDEX idx_sales_created ON sales(created_at)');
       await db.execute('CREATE INDEX idx_sale_items_sale ON sale_items(sale_id)');
     }
+    if (oldVersion < 4) {
+      // Sincronización con la PC: permite rastrear el origen y reenvío de
+      // ventas entre dispositivos vinculados.
+      await db.execute('ALTER TABLE sales ADD COLUMN device_token TEXT');
+      await db.execute(
+          'ALTER TABLE sales ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'CREATE INDEX idx_sales_device ON sales(device_token, created_at)');
+    }
+    if (oldVersion < 5) {
+      // Venta remota aceptada aunque el stock local no alcanzó (offline first):
+      // se marca para avisar en el historial sin bloquear la sincronización.
+      await db.execute(
+          'ALTER TABLE sales ADD COLUMN stock_warning INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -124,10 +139,15 @@ class AppDatabase {
         change REAL NOT NULL DEFAULT 0.0,
         status TEXT NOT NULL DEFAULT 'Completada'
           CHECK(status IN ('Completada', 'Anulada')),
+        device_token TEXT,
+        synced INTEGER NOT NULL DEFAULT 0,
+        stock_warning INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       )
     ''');
     await db.execute('CREATE INDEX idx_sales_created ON sales(created_at)');
+    await db.execute(
+        'CREATE INDEX idx_sales_device ON sales(device_token, created_at)');
 
     await db.execute('''
       CREATE TABLE sale_items (
