@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -25,10 +27,15 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
     formats: const [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.noDuplicates,
     torchEnabled: false,
+    // Resolución 16:9 estándar (NUNCA 4:3 como 1280x960): evita
+    // "Stream configuration failed" en el pipeline Camera2/CameraX de
+    // Android cuando el sensor no soporta el par entrada/salida pedido.
+    cameraResolution: const Size(1280, 720),
   );
 
   final TextEditingController _pinController = TextEditingController();
   final TextEditingController _tenantController = TextEditingController();
+  final TextEditingController _serverIpController = TextEditingController();
 
   PairingService? _service;
   PairingCredentials? _paired;
@@ -49,9 +56,13 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
 
   @override
   void dispose() {
-    _scanner.dispose();
+    // Libera la cámara: se detiene el sensor antes de descartar el
+    // controlador para no dejar sesiones de Camera2/CameraX colgadas.
+    unawaited(_scanner.stop());
+    unawaited(_scanner.dispose());
     _pinController.dispose();
     _tenantController.dispose();
+    _serverIpController.dispose();
     super.dispose();
   }
 
@@ -178,24 +189,33 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
       pairCode: _pinController.text.trim(),
       expiresAt: DateTime.now().add(PairingService.defaultTtl),
     );
-    await _link(payload);
+
+    final outcome = await _link(payload);
+    if (outcome == PairingOutcome.ok) {
+      final ip = _serverIpController.text.trim();
+      if (ip.isNotEmpty) {
+        await _svc.saveSyncServerUrl(
+          'http://$ip:${PairingService.defaultSyncPort}',
+        );
+      }
+    }
   }
 
-  Future<void> _link(PairPayload payload) async {
+  Future<PairingOutcome> _link(PairPayload payload) async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
 
     final outcome = await _svc.linkWithPayload(payload);
     if (!mounted) {
       _handling = false;
-      return;
+      return outcome;
     }
 
     _handling = false;
     switch (outcome) {
       case PairingOutcome.ok:
         final credentials = await _svc.credentials();
-        if (!mounted) return;
+        if (!mounted) return outcome;
         setState(() {
           _paired = credentials;
           _busy = false;
@@ -234,6 +254,7 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
           ),
         );
     }
+    return outcome;
   }
 
   Future<void> _unlink() async {
@@ -269,6 +290,14 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Cambia a la pestaña "Ingresar PIN" sin quedarse en el error de cámara;
+  /// la app nunca colapsa si el sensor falla.
+  void _usePinFallback() {
+    if (!mounted) return;
+    unawaited(_scanner.stop());
+    setState(() => _mode = _PairingMode.pin);
   }
 
   @override
@@ -309,8 +338,15 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
               ),
             ],
             selected: {_mode},
-            onSelectionChanged: (selection) =>
-                setState(() => _mode = selection.first),
+            onSelectionChanged: (selection) {
+              final next = selection.first;
+              if (next != _mode) {
+                // Al salir del modo escáner se libera la cámara (evita
+                // previews/sesiones colgadas en segundo plano).
+                if (_mode == _PairingMode.scan) unawaited(_scanner.stop());
+                setState(() => _mode = next);
+              }
+            },
           ),
           const SizedBox(height: 16),
           if (_mode == _PairingMode.scan)
@@ -347,7 +383,10 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
         controller: _scanner,
         onDetect: _onDetect,
         tapToFocus: true,
-        errorBuilder: (context, error) => _ScannerUnavailable(error: error),
+        errorBuilder: (context, error) => _ScannerUnavailable(
+          error: error,
+          onUsePin: _usePinFallback,
+        ),
       ),
     );
   }
@@ -389,6 +428,17 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
               maxLength: 6,
             ),
             const SizedBox(height: 12),
+            TextField(
+              controller: _serverIpController,
+              decoration: const InputDecoration(
+                labelText: 'IP de la PC (opcional)',
+                hintText: '192.168.1.50',
+                prefixIcon: Icon(Icons.lan_outlined),
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _busy ? null : _submitPin,
               icon: _busy
@@ -408,23 +458,26 @@ class _MobileScanPairingViewState extends State<MobileScanPairingView> {
 }
 
 class _ScannerUnavailable extends StatelessWidget {
-  const _ScannerUnavailable({required this.error});
+  const _ScannerUnavailable({required this.error, required this.onUsePin});
 
   final MobileScannerException error;
+  final VoidCallback onUsePin;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.no_photography_outlined, size: 48),
+            Icon(Icons.no_photography_outlined, size: 48, color: scheme.error),
             const SizedBox(height: 8),
             const Text(
-              'Cámara no disponible en esta plataforma.\n'
-              'Usa la opción "Ingresar PIN".',
+              'No se pudo iniciar la cámara.\n'
+              'Puede estar en uso por otra app o no ser compatible.\n'
+              'Vincula con el PIN de la PC.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
@@ -432,8 +485,14 @@ class _ScannerUnavailable extends StatelessWidget {
               error.errorCode.name,
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onUsePin,
+              icon: const Icon(Icons.pin_outlined),
+              label: const Text('Usar PIN de 6 dígitos'),
             ),
           ],
         ),

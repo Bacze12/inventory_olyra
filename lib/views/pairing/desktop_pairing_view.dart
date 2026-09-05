@@ -80,6 +80,31 @@ class _DesktopPairingViewState extends State<DesktopPairingView> {
     });
     _poll = Timer.periodic(const Duration(seconds: 3), (_) => _checkPairing());
     _checkPairing();
+    _refreshServerHost(session, generation);
+  }
+
+  /// Incorpora la IP LAN de la PC al QR cuando se detecta (la detección de
+  /// interfaces es I/O real, así que corre en segundo plano sin bloquear la
+  /// pantalla en entornos sin red).
+  Future<void> _refreshServerHost(PairingSession session, int generation) async {
+    final host = await _svc.detectLanIpv4();
+    if (!mounted ||
+        _generation != generation ||
+        host == null ||
+        _session == null) {
+      return;
+    }
+    final updated = PairingSession(
+      tenantId: session.tenantId,
+      pairCode: session.pairCode,
+      expiresAt: session.expiresAt,
+      serverHost: host,
+      serverPort: PairingService.defaultSyncPort,
+    );
+    setState(() {
+      _session = updated;
+      _qrPayload = _svc.encodePayload(updated);
+    });
   }
 
   Future<void> _checkPairing() async {

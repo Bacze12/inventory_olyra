@@ -331,4 +331,92 @@ void main() {
       expect(result.expired, isFalse);
     });
   });
+
+  group('PairingService - descubrimiento del servidor local', () {
+    final future = DateTime.now().add(const Duration(minutes: 5));
+
+    test('parsePayload acepta host y puerto de la PC', () async {
+      final harness = _Harness();
+      final raw = jsonEncode({
+        'tenant_id': 'STORE_123',
+        'pair_code': '482910',
+        'expires_at': future.millisecondsSinceEpoch,
+        'server_host': '192.168.1.50',
+        'server_port': 8080,
+      });
+
+      final payload = harness.service.parsePayload(raw);
+
+      expect(payload, isNotNull);
+      expect(payload!.serverHost, '192.168.1.50');
+      expect(payload.serverPort, 8080);
+    });
+
+    test('puerto fuera de rango se descarta', () async {
+      final harness = _Harness();
+      final raw = jsonEncode({
+        'tenant_id': 'STORE_123',
+        'pair_code': '482910',
+        'expires_at': future.millisecondsSinceEpoch,
+        'server_host': '192.168.1.50',
+        'server_port': 99999,
+      });
+
+      final payload = harness.service.parsePayload(raw);
+
+      expect(payload, isNotNull);
+      expect(payload!.serverHost, '192.168.1.50');
+      expect(payload.serverPort, isNull);
+    });
+
+    test('encodePayload incluye host cuando la sesión lo tiene', () async {
+      final harness = _Harness();
+      final session = PairingSession(
+        tenantId: 'STORE_123',
+        pairCode: '123456',
+        expiresAt: future,
+        serverHost: '192.168.1.50',
+        serverPort: 8080,
+      );
+
+      final decoded =
+          jsonDecode(harness.service.encodePayload(session)) as Map;
+
+      expect(decoded['server_host'], '192.168.1.50');
+      expect(decoded['server_port'], 8080);
+    });
+
+    test('al vincular por QR con host, el teléfono guarda la URL de sync',
+        () async {
+      final harness = _Harness();
+      final payload = PairPayload(
+        tenantId: 'STORE_123',
+        pairCode: '482910',
+        expiresAt: future,
+        serverHost: '192.168.1.50',
+        serverPort: 8080,
+      );
+
+      final outcome = await harness.service.linkWithPayload(payload);
+
+      expect(outcome, PairingOutcome.ok);
+      expect(
+        await harness.service.syncServerUrl(),
+        'http://192.168.1.50:8080',
+      );
+    });
+
+    test('sin host en el QR no se configura servidor de sync', () async {
+      final harness = _Harness();
+      final payload = PairPayload(
+        tenantId: 'STORE_123',
+        pairCode: '482910',
+        expiresAt: future,
+      );
+
+      await harness.service.linkWithPayload(payload);
+
+      expect(await harness.service.syncServerUrl(), isNull);
+    });
+  });
 }

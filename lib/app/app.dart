@@ -8,6 +8,7 @@ import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/pairing_service.dart';
+import '../data/services/sync_service.dart';
 import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
@@ -39,6 +40,15 @@ class InventarioApp extends StatelessWidget {
         ),
         Provider<SalesRepository>(
           create: (_) => SalesRepository(AppDatabase.instance),
+        ),
+        // Cliente de sincronización Wi-Fi con la PC: disponible en todo el
+        // árbol (sobre MaterialApp) para HomeScreen y los flujos de sync.
+        Provider<SyncService>(
+          create: (ctx) => SyncService(
+            products: ctx.read<ProductRepository>(),
+            sales: ctx.read<SalesRepository>(),
+            pairing: ctx.read<PairingService>(),
+          ),
         ),
         ChangeNotifierProvider<SalesProvider>(
           create: (ctx) => SalesProvider(

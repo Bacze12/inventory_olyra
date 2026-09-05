@@ -1,4 +1,5 @@
 ﻿import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -41,18 +42,28 @@ class PairingCredentials {
 
 /// Payload escaneado desde el QR de la PC (JSON temporal).
 ///
-/// Shape: `{"tenant_id": "STORE_123", "pair_code": "482910", "expires_at": ms}`.
+/// Shape:
+/// `{"tenant_id": "STORE_123", "pair_code": "482910", "expires_at": ms}`.
+/// Además incluye (opcional) `server_host`/`server_port` con la IP local de
+/// la PC, para que el teléfono pueda sincronizar sin configurar nada más.
 @immutable
 class PairPayload {
   const PairPayload({
     required this.tenantId,
     required this.pairCode,
     required this.expiresAt,
+    this.serverHost,
+    this.serverPort,
   });
 
   final String tenantId;
   final String pairCode;
   final DateTime expiresAt;
+
+  /// IP local de la PC (ej. `192.168.1.50`), si fue detectada.
+  final String? serverHost;
+
+  final int? serverPort;
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
@@ -60,6 +71,10 @@ class PairPayload {
         'tenant_id': tenantId,
         'pair_code': pairCode,
         'expires_at': expiresAt.millisecondsSinceEpoch,
+        if (serverHost != null && serverHost!.isNotEmpty) ...{
+          'server_host': serverHost,
+          'server_port': serverPort ?? PairingService.defaultSyncPort,
+        },
       };
 }
 
@@ -70,11 +85,18 @@ class PairingSession {
     required this.tenantId,
     required this.pairCode,
     required this.expiresAt,
+    this.serverHost,
+    this.serverPort,
   });
 
   final String tenantId;
   final String pairCode;
   final DateTime expiresAt;
+
+  /// IP local de la PC (para que el teléfono encuentre el servidor de sync).
+  final String? serverHost;
+
+  final int? serverPort;
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
@@ -87,6 +109,8 @@ class PairingSession {
         tenantId: tenantId,
         pairCode: pairCode,
         expiresAt: expiresAt,
+        serverHost: serverHost,
+        serverPort: serverPort,
       );
 }
 
@@ -196,17 +220,31 @@ class PairingService {
 
   static const kTenantKey = 'tenant_id';
   static const kServerUrlKey = 'pairing_server_url';
+  static const kSyncServerUrlKey = 'sync_server_url';
   static const kCredentialsKey = 'pairing_credentials';
   static const kDeviceTokenKey = 'device_token';
   static const kTenantIdSecretKey = 'tenant_id';
 
   static const defaultTtl = Duration(minutes: 10);
+  static const defaultSyncPort = 8080;
 
   final PairingSettingsSource settings;
   final PairingSecretStore _secrets;
   final http.Client _http;
 
   static final RegExp _pinPattern = RegExp(r'^\d{6}$');
+
+  /// Adaptadores de red virtuales/banda a descartar al detectar la IP.
+  static final RegExp _virtualAdapter = RegExp(
+    r'(virtual|vbox|vmware|vmnet|hyper-v|vethernet|docker|wintun|tunnel|bluetooth)',
+    caseSensitive: false,
+  );
+
+  /// Adaptadores con nombre de red real (Wi-Fi/Ethernet/LAN/WLAN).
+  static final RegExp _wiredWifi = RegExp(
+    r'(wi[ -]?fi|ethernet|wlan|lan)',
+    caseSensitive: false,
+  );
 
   /// Devuelve el `tenant_id` de esta tienda, generándolo si aún no existe.
   Future<String> resolveTenantId() async {
@@ -224,7 +262,104 @@ class PairingService {
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
   }
 
+  /// URL del servidor local de la PC (`http://IP:8080`), aprendida desde el
+  /// QR vinculado. Es lo que usa el teléfono para sincronizar por Wi-Fi.
+  ///
+  /// La lectura devuelve SIEMPRE el formato completo `http://<host>[:porte]`
+  /// (sin slash final ni rutas), vía [normalizeSyncServerUrl].
+  Future<String?> syncServerUrl() async {
+    final stored = await settings.read(kSyncServerUrlKey);
+    final trimmed = stored?.trim();
+    return (trimmed == null || trimmed.isEmpty)
+        ? null
+        : normalizeSyncServerUrl(trimmed);
+  }
+
+  Future<void> saveSyncServerUrl(String url) async {
+    await settings.write(kSyncServerUrlKey, normalizeSyncServerUrl(url));
+  }
+
+  /// Normaliza una URL de servidor al formato canónico `http://<host>:<puerto>`
+  /// con puerto por defecto 8080.
+  ///
+  /// - Añade el esquema `http://` si falta (p. ej. `192.168.1.50:8080`).
+  /// - Añade el puerto `:8080` si la URL no lo trae.
+  /// - Descarta el slash final y cualquier ruta, evitando rutas duplicadas
+  ///   como `http://IP:8080//api/...`.
+  static String normalizeSyncServerUrl(String raw) {
+    var url = raw.trim();
+    if (url.isEmpty) return url;
+    final lower = url.toLowerCase();
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      url = 'http://$url';
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return url;
+    final port = uri.hasPort ? uri.port : defaultSyncPort;
+    return '${uri.scheme}://${uri.host}:$port';
+  }
+
+  Future<void> clearSyncServerUrl() async {
+    await settings.write(kSyncServerUrlKey, '');
+  }
+
+  /// Detecta la IP LAN IPv4 de este equipo descartando adaptadores virtuales
+  /// (VirtualBox/VMware/Hyper-V/Docker/túneles). Devuelve null si no se pudo.
+  ///
+  /// El nombre del adaptador (Windows) permite excluir "VirtualBox Host-Only",
+  /// "vEthernet (Default Switch)", "VMware Network Adapter", etc. y priorizar
+  /// Wi-Fi/Ethernet reales, donde el teléfono sí puede llegar.
+  Future<String?> detectLanIpv4() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+
+      String? privateReal;
+      String? privateVirtual;
+      String? anyReal;
+      String? bestRank4;
+
+      for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        final isVirtual = _virtualAdapter.hasMatch(name);
+        final isWiredWifi = _wiredWifi.hasMatch(name);
+        for (final addr in iface.addresses) {
+          if (addr.isLoopback || addr.isMulticast || addr.isLinkLocal) {
+            continue;
+          }
+          final raw = addr.rawAddress;
+          final first = raw.isNotEmpty ? raw.first : 0;
+          final isPrivate = first == 192 || first == 10 || first == 172;
+          final ip = addr.address;
+
+          if (!isVirtual && isPrivate && isWiredWifi && bestRank4 == null) {
+            bestRank4 = ip; // Wi-Fi/Ethernet privada: candidata ideal.
+          } else if (!isVirtual && isPrivate && privateReal == null) {
+            privateReal = ip;
+          } else if (isVirtual && isPrivate && privateVirtual == null) {
+            privateVirtual = ip;
+          } else if (!isVirtual && anyReal == null) {
+            anyReal = ip;
+          }
+        }
+      }
+
+      // Orden de preferencia: Wi-Fi/Ethernet privada → privada real →
+      // cualquiera real → privada de adaptador virtual (último recurso).
+      return bestRank4 ?? privateReal ?? anyReal ?? privateVirtual;
+    } catch (_) {
+      // Sin red o sin permisos: el QR se genera sin host (modo PIN/local).
+    }
+    return null;
+  }
+
   /// Inicia una nueva sesión de emparejamiento con PIN aleatorio de 6 dígitos.
+  ///
+  /// No realiza I/O de red para poder usarse en cualquier entorno; la IP LAN de
+  /// la PC (necesaria para el modo Wi-Fi) la resuelve [detectLanIpv4] quien
+  /// inicie la sesión y la incorpora al QR cuando esté disponible.
   Future<PairingSession> startSession({
     Duration ttl = defaultTtl,
   }) async {
@@ -261,10 +396,24 @@ class PairingService {
     final expiresMs = expiresAt is int ? expiresAt : int.tryParse('$expiresAt');
     if (expiresMs == null) return null;
 
+    final serverHost = decoded['server_host'];
+    final serverPort = decoded['server_port'];
+    var host = serverHost is String && serverHost.trim().isNotEmpty
+        ? serverHost.trim()
+        : null;
+    if (host != null && !_looksLikeHost(host)) host = null;
+
+    final port = serverPort is int
+        ? serverPort
+        : int.tryParse('$serverPort');
+    final validPort = port != null && port > 0 && port <= 65535;
+
     return PairPayload(
       tenantId: tenantId.trim(),
       pairCode: pairCode,
       expiresAt: DateTime.fromMillisecondsSinceEpoch(expiresMs),
+      serverHost: host,
+      serverPort: validPort ? port : null,
     );
   }
 
@@ -340,6 +489,13 @@ class PairingService {
     }
 
     await _saveCredentials(token, payload.tenantId);
+    // El QR trae la IP local de la PC: el teléfono la guarda como endpoint de
+    // sincronización (descubrimiento sin mDNS).
+    final host = payload.serverHost;
+    if (host != null) {
+      final port = payload.serverPort ?? defaultSyncPort;
+      await saveSyncServerUrl('http://$host:$port');
+    }
     return PairingOutcome.ok;
   }
 
@@ -408,6 +564,9 @@ class PairingService {
         base.endsWith('/') ? base.substring(0, base.length - 1) : base;
     return Uri.parse('$normalized$path');
   }
+
+  static bool _looksLikeHost(String value) =>
+      RegExp(r'^[a-zA-Z0-9.\-]+$').hasMatch(value);
 
   String _generatePin() =>
       Random.secure().nextInt(1000000).toString().padLeft(6, '0');
