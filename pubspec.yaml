@@ -1,8 +1,8 @@
 name: scanflow
-description: "Sistema de control de inventario offline para ScanFlow."
+description: "Sistema de control de inventario offline para BodegaFlow."
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
   sdk: ^3.13.0
@@ -51,7 +51,7 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/scanflow_logo.jpg"
+  image_path: "assets/icon/bodegaflow_icon.png"
   min_sdk_android: 21
 
 flutter:

@@ -92,7 +92,7 @@ class UpdateService {
       builder: (context) => AlertDialog(
         title: Text('Actualización v$version disponible'),
         content: const Text(
-          'Hay una nueva versión de ScanFlow. ¿Deseas descargarla e instalarla ahora?',
+          'Hay una nueva versión de BodegaFlow. ¿Deseas descargarla e instalarla ahora?',
         ),
         actions: [
           TextButton(
