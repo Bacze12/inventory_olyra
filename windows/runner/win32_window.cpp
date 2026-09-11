@@ -150,7 +150,8 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  // Abre siempre maximizada (ventana completa con barra de tareas visible).
+  return ShowWindow(window_handle_, SW_MAXIMIZE);
 }
 
 // static

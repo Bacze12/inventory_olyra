@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/config/olyra_config.dart';
+import '../data/cloud/supabase_gateway.dart';
 import '../data/database/app_database.dart';
+import '../data/remote/olyra_license_api.dart';
 import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/services/pairing_service.dart';
 import '../data/services/sync_service.dart';
-import '../features/home/home_screen.dart';
+import '../features/activation/olyra_license_controller.dart';
+import '../features/activation/startup_gate.dart';
+import '../features/license/license_service.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
 import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
+import '../features/sync/backup_service.dart';
+import '../features/sync/cloud_sync_manager.dart';
+import '../services/hardware_identity.dart';
 import '../views/pos/cart_provider.dart';
 import 'theme/app_theme.dart';
 
@@ -75,12 +84,60 @@ class InventarioApp extends StatelessWidget {
             settingsRepository: ctx.read<SettingsRepository>(),
           )..init(),
         ),
+        // ---- Nube (Supabase): licencia, sincronización y respaldos. ----
+        // Se auto-desactivan cuando no hay credenciales compiladas, así la app
+        // nunca pierde su modo 100% local.
+        Provider<SupabaseGateway>(
+          create: (_) => SupabaseGateway.instance,
+        ),
+        Provider<HardwareIdentity>(
+          create: (_) => HardwareIdentity(const FlutterSecureStorage()),
+        ),
+        // ---- Licenciamiento offline (olyra.cl + JWT RS256) ----
+        Provider<OlyraLicenseApi>(
+          create: (_) =>
+              OlyraLicenseApi(activationUrl: OlyraConfig.activationUrl),
+        ),
+        ChangeNotifierProvider<OlyraLicenseController>(
+          create: (ctx) => OlyraLicenseController(
+            hardware: ctx.read<HardwareIdentity>(),
+            api: ctx.read<OlyraLicenseApi>(),
+            publicKeyPem: OlyraConfig.publicKeyPem,
+          )..init(),
+        ),
+        ChangeNotifierProvider<LicenseService>(
+          create: (ctx) => LicenseService(
+            gateway: ctx.read<SupabaseGateway>(),
+            hardware: ctx.read<HardwareIdentity>(),
+            settings: ctx.read<SettingsRepository>(),
+          )..init(),
+        ),
+        ChangeNotifierProvider<CloudSyncManager>(
+          create: (ctx) => CloudSyncManager(
+            gateway: ctx.read<SupabaseGateway>(),
+            license: ctx.read<LicenseService>(),
+            products: ctx.read<ProductRepository>(),
+            movements: ctx.read<MovementRepository>(),
+            sales: ctx.read<SalesRepository>(),
+            settings: ctx.read<SettingsRepository>(),
+          )..start(),
+        ),
+        ChangeNotifierProvider<BackupService>(
+          create: (ctx) => BackupService(
+            gateway: ctx.read<SupabaseGateway>(),
+            license: ctx.read<LicenseService>(),
+            products: ctx.read<ProductRepository>(),
+            movements: ctx.read<MovementRepository>(),
+            sales: ctx.read<SalesRepository>(),
+            settings: ctx.read<SettingsRepository>(),
+          ),
+        ),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        home: const HomeScreen(),
+        home: const StartupGate(),
       ),
     );
   }

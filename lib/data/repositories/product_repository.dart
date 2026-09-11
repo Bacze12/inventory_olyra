@@ -36,6 +36,19 @@ class ProductRepository {
     return rows.map(Product.fromMap).toList();
   }
 
+  /// Productos modificados/creados después de `updatedSince` (ISO).
+  /// Se usa para subir solo la "changela" a la nube (last-write-wins).
+  Future<List<Product>> updatedSince(String updatedSince) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'products',
+      where: 'updated_at > ?',
+      whereArgs: [updatedSince],
+      orderBy: 'updated_at ASC',
+    );
+    return rows.map(Product.fromMap).toList();
+  }
+
   Future<Product?> byId(int id) async {
     final db = await _db.database;
     final rows = await db.query(

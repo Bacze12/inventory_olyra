@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
@@ -22,6 +23,9 @@ import '../scanner/scanner_screen.dart';
 import '../../services/update_service.dart';
 import '../../views/pos/pos_desktop_view.dart';
 import '../../views/sales/sales_history_view.dart';
+import '../license/license_service.dart';
+import '../sync/cloud_sync_manager.dart';
+import '../sync/cloud_sync_panel.dart';
 
 bool _isDesktop() {
   if (kIsWeb) return false;
@@ -51,7 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// En la PC vinculada levanta el servidor local (Shelf) para que el
   /// teléfono pueda sincronizar el catálogo y las ventas por Wi-Fi.
+  /// Solo se ejecuta cuando la sincronización móvil está habilitada.
   Future<void> _bootstrapSyncServer(BuildContext context) async {
+    if (AppConfig.isStandalone) return; // Modo 100% local: sin servidor ni red.
     if (!_isDesktop()) return;
     final pairing = context.read<PairingService>();
     final products = context.read<ProductRepository>();
@@ -127,10 +133,15 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _HeroSection(
-            onScan: () => _push(context, const ScannerScreen()),
+            // En escritorio standalone no hay cámara móvil: el escaneo se hace
+            // en el POS con pistola USB/Bluetooth o digitación manual.
+            onScan: () => _push(
+              context,
+              _isDesktop() ? const PosDesktopView() : const ScannerScreen(),
+            ),
           ),
           const SizedBox(height: 12),
-          if (_isDesktop()) ...[
+          if (_isDesktop() && AppConfig.enableMobileSync) ...[
             const _ServerStatusCard(),
             const SizedBox(height: 12),
           ],
@@ -193,25 +204,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _MenuTile(
                   icon: Icons.qr_code_scanner,
                   title: 'Escáner',
-                  subtitle: 'Entradas y salidas',
-                  onTap: () => _push(context, const ScannerScreen()),
+                  subtitle: _isDesktop()
+                      ? 'Pistola escáner en el POS'
+                      : 'Entradas y salidas',
+                  onTap: () => _push(
+                    context,
+                    _isDesktop()
+                        ? const PosDesktopView()
+                        : const ScannerScreen(),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _MenuTile(
-            icon: Icons.devices,
-            title: 'Vincular dispositivo',
-            subtitle: 'Emparejar esta PC con un celular (QR / PIN)',
-            onTap: () => _push(
-              context,
-              _isDesktop()
-                  ? const DesktopPairingView()
-                  : const MobileScanPairingView(),
+          if (AppConfig.enableCloudSync) _CloudSyncTile(),
+          if (AppConfig.enableMobileSync)
+            _MenuTile(
+              icon: Icons.devices,
+              title: 'Vincular dispositivo',
+              subtitle: 'Emparejar esta PC con un celular (QR / PIN)',
+              onTap: () => _push(
+                context,
+                _isDesktop()
+                    ? const DesktopPairingView()
+                    : const MobileScanPairingView(),
+              ),
             ),
-          ),
-          if (!_isDesktop()) ...[
+          if (!_isDesktop() && AppConfig.enableMobileSync) ...[
             const SizedBox(height: 12),
             _MenuTile(
               icon: Icons.wifi_tethering,
@@ -343,6 +363,36 @@ class _SyncProgressDialog extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CloudSyncTile extends StatelessWidget {
+  const _CloudSyncTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final license = context.watch<LicenseService>();
+    final sync = context.watch<CloudSyncManager>();
+
+    final String subtitle;
+    if (license.status == LicenseStatus.needsLogin) {
+      subtitle = 'Inicia sesión para sincronizar la licencia';
+    } else if (license.status == LicenseStatus.invalid) {
+      subtitle = 'Licencia inválida: ventas bloqueadas';
+    } else if (sync.state == CloudSyncState.syncing) {
+      subtitle = 'Sincronizando…';
+    } else if (sync.state == CloudSyncState.error) {
+      subtitle = 'Error de sincronización · reintento automático';
+    } else {
+      subtitle = 'Nube lista · validar, sincronizar y respaldar';
+    }
+
+    return _MenuTile(
+      icon: Icons.cloud_sync_outlined,
+      title: 'Sincronización y respaldo',
+      subtitle: subtitle,
+      onTap: () => showCloudSyncPanel(context),
     );
   }
 }

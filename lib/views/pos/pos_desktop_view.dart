@@ -12,6 +12,8 @@ import '../../data/models/product.dart';
 import '../../data/models/sale.dart';
 import '../../data/repositories/movement_repository.dart';
 import '../../data/repositories/product_repository.dart';
+import '../../features/license/license_service.dart';
+import '../../features/products/product_form_screen.dart';
 import '../../features/products/product_provider.dart';
 import '../../features/sales/sales_provider.dart';
 import '../sales/sales_history_view.dart';
@@ -42,9 +44,12 @@ class _PosDesktopViewState extends State<PosDesktopView> {
   String _query = '';
   bool _checkoutOpen = false;
 
+  final StringBuffer _gunBuffer = StringBuffer();
+
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_hardwareKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<ProductProvider>().load();
@@ -54,9 +59,42 @@ class _PosDesktopViewState extends State<PosDesktopView> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_hardwareKey);
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  /// Escucha global de teclado para pistolas USB/Bluetooth (emulan teclado).
+  /// Acumula caracteres; al recibir Enter con el foco FUERA del buscador
+  /// procesa la tira completa como lectura de código. Si el foco está en el
+  /// campo, el Enter lo resuelve [onSubmitted] sin duplicar.
+  /// Retorna `true` (consumido) solo cuando finalizó una lectura completa.
+  bool _hardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent || _checkoutOpen) return false;
+
+    final key = event.logicalKey;
+    final isEnter = key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter;
+
+    if (isEnter && _searchFocus.hasFocus) {
+      _gunBuffer.clear();
+      return false;
+    }
+
+    if (isEnter) {
+      final text = _gunBuffer.toString();
+      _gunBuffer.clear();
+      if (normalizeBarcode(text).isEmpty) return false;
+      unawaited(_processRead(text));
+      return true;
+    }
+
+    final char = event.character;
+    if (char != null && char.isNotEmpty && !_searchFocus.hasFocus) {
+      _gunBuffer.write(char);
+    }
+    return false;
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -93,7 +131,16 @@ class _PosDesktopViewState extends State<PosDesktopView> {
   }
 
   Future<void> _onSearchSubmitted() async {
-    final text = normalizeBarcode(_searchController.text);
+    _gunBuffer.clear();
+    final text = _searchController.text;
+    if (normalizeBarcode(text).isEmpty) return;
+    unawaited(_processRead(text));
+  }
+
+  /// Procesa una lectura de código (pistola o digitación manual): busca en la
+  /// base local, agrega al ticket o muestra un aviso para crearlo.
+  Future<void> _processRead(String raw) async {
+    final text = normalizeBarcode(raw);
     if (text.isEmpty) return;
 
     Product? match;
@@ -105,15 +152,46 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     if (!mounted) return;
 
     if (match == null) {
-      // No es un código válido: el texto queda como término de búsqueda.
-      unawaited(SoundFeedback.error());
+      _showUnknownCode(text);
       return;
     }
 
     _addToCart(match);
     _searchController.clear();
     if (mounted) setState(() => _query = '');
-    _searchFocus.requestFocus();
+    _keepSearchFocus();
+  }
+
+  /// Código no encontrado: aviso no bloqueante con opción de crear producto.
+  void _showUnknownCode(String code) {
+    unawaited(SoundFeedback.error());
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Código "$code" no está en el catálogo'),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Crear producto',
+            onPressed: () => _createProduct(code),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _createProduct(String code) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ProductFormScreen(initialBarcode: code),
+      ),
+    );
+    if (created == true && mounted) {
+      messenger.showSnackBar(const SnackBar(content: Text('Producto creado')));
+      context.read<ProductProvider>().load();
+      _keepSearchFocus();
+    }
   }
 
   void _addToCart(Product product) {
@@ -135,6 +213,22 @@ class _PosDesktopViewState extends State<PosDesktopView> {
     final cart = context.read<CartProvider>();
     final salesProvider = context.read<SalesProvider>();
     final productProvider = context.read<ProductProvider>();
+
+    // Bloqueo por licencia de hardware (solo si la nube ya respondió que el
+    // dispositivo NO está autorizado).
+    final license = context.read<LicenseService>();
+    if (license.isBlockingSales) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text(
+            'Licencia inválida o expirada en este equipo.\n'
+            'Contacta al administrador para reactivar el dispositivo.',
+          ),
+          duration: Duration(seconds: 6),
+        ));
+      return;
+    }
 
     if (cart.isEmpty) {
       messenger
@@ -312,21 +406,64 @@ class _PosDesktopViewState extends State<PosDesktopView> {
             onTap: _keepSearchFocus,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
                   Expanded(
-                    flex: 3,
-                    child: _buildCatalog(catalog, products),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: _buildTicket(cart),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: _buildCatalog(catalog, products),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: _buildTicket(cart),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+        child: TextField(
+          controller: _searchController,
+          focusNode: _searchFocus,
+          autofocus: true,
+          onChanged: (value) => setState(() => _query = value),
+          onSubmitted: (value) => _onSearchSubmitted(),
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            labelText: 'Buscar o escanear',
+            hintText: 'Código de barras o nombre · Enter agrega al ticket',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Limpiar búsqueda',
+                    onPressed: _clearSearch,
+                  ),
           ),
         ),
       ),
@@ -346,31 +483,8 @@ class _PosDesktopViewState extends State<PosDesktopView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocus,
-              autofocus: true,
-              onChanged: (value) => setState(() => _query = value),
-              onSubmitted: (value) => _onSearchSubmitted(),
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                labelText: 'Buscar o escanear',
-                hintText: 'Código de barras o nombre… Enter agrega al ticket',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close),
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: _clearSearch,
-                      ),
-              ),
-            ),
-          ),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(

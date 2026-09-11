@@ -56,5 +56,23 @@ class MovementRepository {
     return rows.map(Movement.fromMap).toList();
   }
 
+  /// Todos los movimientos con su código de barras resuelto (JOIN).
+  /// Devuelve mapas crudos listos para mapear a la tabla `pos_movements` de la
+  /// nube. El filtrado por cursor se hace en Dart (DateTime) para no depender
+  /// de la zona horaria del texto SQLite.
+  Future<List<Map<String, Object?>>> allWithBarcode() async {
+    final db = await _db.database;
+    return db.rawQuery(
+      '''
+      SELECT m.product_id AS product_id, m.type AS type, m.delta AS delta,
+             m.quantity_after AS quantity_after, m.created_at AS created_at,
+             p.barcode AS barcode
+      FROM movements m
+      LEFT JOIN products p ON p.id = m.product_id
+      ORDER BY m.created_at ASC
+      ''',
+    );
+  }
+
   static int clampNonNegative(int value) => value < 0 ? 0 : value;
 }
