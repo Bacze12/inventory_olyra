@@ -6,7 +6,14 @@ import 'olyra_license_controller.dart';
 
 /// Abre el diálogo "Acerca de / Licencia" con el detalle del JWT local:
 /// estado, vencimiento, días restantes e identificador de hardware.
-Future<void> showLicenseAboutDialog(BuildContext context) async {
+///
+/// Si [onSearchUpdates] es provisto, se muestra una entrada
+/// "Buscar actualizaciones" que cierra el diálogo y delega en la pantalla
+/// principal (para que los diálogos/SnackBars se muestren sobre el Home).
+Future<void> showLicenseAboutDialog(
+  BuildContext context, {
+  Future<void> Function()? onSearchUpdates,
+}) async {
   final license = context.read<OlyraLicenseController>();
   final package = await PackageInfo.fromPlatform();
 
@@ -91,6 +98,20 @@ Future<void> showLicenseAboutDialog(BuildContext context) async {
                   ],
                 ),
               ),
+            if (onSearchUpdates != null) ...[
+              const Divider(height: 24),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.system_update_alt),
+                title: const Text('Buscar actualizaciones'),
+                subtitle: const Text('Comprueba ahora si hay una nueva versión'),
+                onTap: () {
+                  Navigator.of(dialogContext).pop();
+                  onSearchUpdates();
+                },
+              ),
+            ],
           ],
         ),
       ),
