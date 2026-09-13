@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
+import '../../services/scanner_input_service.dart';
 import '../scanner/barcode_capture_screen.dart';
 import 'product_provider.dart';
 
@@ -23,11 +24,13 @@ class ProductFormScreen extends StatefulWidget {
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final FocusNode _barcodeFocus = FocusNode();
   late final TextEditingController _nameController;
   late final TextEditingController _barcodeController;
   late final TextEditingController _quantityController;
   late final TextEditingController _minStockController;
   late final TextEditingController _priceController;
+  late final _ProductFormSink _gunSink;
 
   bool _saving = false;
 
@@ -48,16 +51,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _priceController = TextEditingController(
       text: product?.price.toStringAsFixed(2) ?? '',
     );
+    _gunSink = _ProductFormSink(this);
+    ScannerInputService.instance.register(_gunSink);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Foco nativo en el código de barras para que una pistola HID escriba
+      // directo en el campo (compatibilidad nativa), sin navegar al POS.
+      if (_barcodeController.text.trim().isEmpty) {
+        _barcodeFocus.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
+    ScannerInputService.instance.unregister(_gunSink);
+    _barcodeFocus.dispose();
     _nameController.dispose();
     _barcodeController.dispose();
     _quantityController.dispose();
     _minStockController.dispose();
     _priceController.dispose();
     super.dispose();
+  }
+
+  /// Aplica una lectura completa de la pistola al campo de código de barras.
+  void _applyGunScan(String raw) {
+    final code = normalizeBarcode(raw);
+    if (code.isEmpty) return;
+    setState(() => _barcodeController.text = code);
+    _barcodeFocus.requestFocus();
   }
 
   bool get _isEditing => widget.product != null;
@@ -128,6 +151,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Widget _barcodeField() => TextFormField(
         controller: _barcodeController,
+        focusNode: _barcodeFocus,
         keyboardType: TextInputType.visiblePassword,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
@@ -232,4 +256,48 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
     Navigator.of(context).pop(true);
   }
+}
+
+/// Sink de la pistola HID para el formulario de producto.
+///
+/// - Si el campo de código de barras tiene el foco, la pistola escribe NORMAL
+///   (compatibilidad nativa con TextField); no se intercepta nada.
+/// - Si el campo NO tiene foco, se acumula la tira en un búfer y al llegar el
+///   Enter se completa el campo `barcode` automáticamente.
+class _ProductFormSink implements ScannerInputSink {
+  _ProductFormSink(this._state);
+
+  final _ProductFormScreenState _state;
+  final StringBuffer _buffer = StringBuffer();
+
+  @override
+  bool handleGunKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+
+    final key = event.logicalKey;
+    final isEnter = key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter;
+
+    if (_state._barcodeFocus.hasFocus) {
+      // Foco nativo: el TextField recibe los caracteres directo.
+      return false;
+    }
+
+    if (isEnter) {
+      final text = _buffer.toString();
+      _buffer.clear();
+      if (normalizeBarcode(text).isEmpty) return false;
+      _state._applyGunScan(text);
+      return true;
+    }
+
+    final char = event.character;
+    if (char != null && char.isNotEmpty) {
+      _buffer.write(char);
+    }
+    return false;
+  }
+
+  @override
+  void clearBuffer() => _buffer.clear();
 }

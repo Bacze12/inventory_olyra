@@ -1,15 +1,18 @@
 // ignore_for_file: prefer_initializing_formals
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/remote/olyra_license_api.dart';
-import '../../services/hardware_identity.dart';
+import '../../services/hardware_id_service.dart';
 import 'jwt_license_validator.dart';
+import 'license_credential_store.dart';
 import 'license_file_store.dart';
 
 /// Estado del licenciamiento offline de la app.
 enum OlyraLicenseState {
-  /// Leyendo/verificando el archivo de licencia local al arrancar.
+  /// Leyendo/verificando la licencia local al arrancar.
   checking,
 
   /// No hay licencia válida: hay que activar con un License Key.
@@ -21,39 +24,50 @@ enum OlyraLicenseState {
 
 /// Controlador del licenciamiento por License Key (olyra.cl + JWT RS256).
 ///
-/// En cada apertura de la app valida 100% offline la firma del JWT guardado
-/// con la Clave Pública embebida; nunca consulta la red salvo en el primer
-/// uso (activación online) o revalidación manual.
+/// En cada apertura valida 100% offline la firma del JWT guardado con la Clave
+/// Pública embebida; el acceso nunca depende de la red. Al activar (o al
+/// arrancar con licencia válida) se dispara una revalidación silenciosa contra
+/// `/api/v1/license/validate`: si el servidor no responde (offline) la app
+/// sigue funcionando con el registro local.
 class OlyraLicenseController extends ChangeNotifier {
   OlyraLicenseController({
-    required HardwareIdentity hardware,
+    required HardwareIdService hardware,
     required OlyraLicenseApi api,
+    required LicenseCredentialStore credentials,
     required String publicKeyPem,
   })  : _hardware = hardware,
         _api = api,
+        _credentials = credentials,
         _publicKeyPem = publicKeyPem;
 
-  final HardwareIdentity _hardware;
+  final HardwareIdService _hardware;
   final OlyraLicenseApi _api;
+  final LicenseCredentialStore _credentials;
   final String _publicKeyPem;
 
   OlyraLicenseState _state = OlyraLicenseState.checking;
   String? _hardwareId;
   LicenseFileStore? _store;
   LicenseClaims? _claims;
-  bool _activating = false;
+  String? _deviceName;
   String? _activationError;
   String _lastMessage = '';
+  bool _activating = false;
+  bool _validating = false;
 
   OlyraLicenseState get state => _state;
   bool get isUnlocked => _state == OlyraLicenseState.active;
   bool get activating => _activating;
+  bool get validating => _validating;
   String? get activationError => _activationError;
   LicenseClaims? get claims => _claims;
   String get lastMessage => _lastMessage;
 
   /// Identificador de hardware, resuelto al inicializar.
   String? get hardwareId => _hardwareId;
+
+  /// Nombre con el que quedó registrado este equipo (p. ej. "Caja 1").
+  String? get deviceName => _deviceName;
 
   /// Carga y verifica la licencia local. Bloquea el uso si no es válida.
   Future<void> init() async {
@@ -62,6 +76,18 @@ class OlyraLicenseController extends ChangeNotifier {
       final dir = await getApplicationSupportDirectory();
       _store = LicenseFileStore(dir, hardwareId: _hardwareId!);
 
+      // 1) Fuente preferida: credenciales cifradas (flutter_secure_storage).
+      final credentials = await _credentials.read();
+      if (credentials != null) {
+        final claims = _verifyLocal(credentials.activationToken);
+        if (claims != null) {
+          _accept(claims, deviceName: credentials.deviceName, backfillFile: true);
+          _scheduleSilentValidate(credentials);
+          return;
+        }
+      }
+
+      // 2) Fallback histórico: license.dat cifrado con DAC por HWID.
       final saved = await _store!.read();
       if (saved == null) {
         _state = OlyraLicenseState.needsActivation;
@@ -72,16 +98,15 @@ class OlyraLicenseController extends ChangeNotifier {
       if (claims == null) {
         // Firma inválida / HWID distinto / vencida o archivo comprometido.
         await _store!.clear();
+        await _credentials.clear();
         _state = OlyraLicenseState.needsActivation;
         _lastMessage =
             'La licencia local no es válida en este equipo. Activa de nuevo.';
         return;
       }
 
-      _claims = claims;
-      _state = OlyraLicenseState.active;
-      _lastMessage = 'Licencia activa hasta '
-          '${_formatDate(claims.expiresAt)}.';
+      _accept(claims);
+      _scheduleSilentValidate();
     } catch (error) {
       debugPrint('[OlyraLicense] init falló: $error');
       _state = OlyraLicenseState.needsActivation;
@@ -91,7 +116,7 @@ class OlyraLicenseController extends ChangeNotifier {
   }
 
   /// Activación online (primer uso). Devuelve `true` si quedó activada.
-  Future<bool> activate(String licenseKey) async {
+  Future<bool> activate(String licenseKey, {String deviceName = ''}) async {
     if (_activating || _hardwareId == null) return false;
     _activating = true;
     _activationError = null;
@@ -102,6 +127,7 @@ class OlyraLicenseController extends ChangeNotifier {
       final token = await _api.activate(
         hwid: _hardwareId!,
         licenseKey: licenseKey,
+        deviceName: deviceName,
       );
       debugPrint(
         '[OlyraLicense] token length=${token.length} '
@@ -123,21 +149,27 @@ class OlyraLicenseController extends ChangeNotifier {
       );
 
       await _store!.write(token);
-      debugPrint('[OlyraLicense] token guardado en license.dat');
+      await _credentials.save(
+        licenseKey: licenseKey.trim(),
+        hardwareId: _hardwareId!,
+        activationToken: token,
+        deviceName: deviceName.isNotEmpty ? deviceName.trim() : null,
+      );
+      debugPrint('[OlyraLicense] token guardado en license.dat y secure storage');
 
       _claims = claims;
+      _deviceName = deviceName.isNotEmpty ? deviceName.trim() : null;
       _state = OlyraLicenseState.active;
       _lastMessage = '¡Activado! Licencia válida hasta '
           '${_formatDate(claims.expiresAt)}.';
+      notifyListeners();
+      _scheduleSilentValidate();
       return true;
     } on LicenseServerException catch (error, stack) {
       debugPrint('[OlyraLicense] LicenseServerException: ${error.message} '
-          'status=${error.statusCode}');
+          'status=${error.statusCode} code=${error.code}');
       debugPrint('$stack');
-      final code = error.statusCode;
-      _activationError = code == null
-          ? error.message
-          : 'Error $code: ${error.message}';
+      _activationError = _friendlyError(error);
     } catch (error, stack) {
       debugPrint('[OlyraLicense] activación falló: $error');
       debugPrint('$stack');
@@ -150,10 +182,38 @@ class OlyraLicenseController extends ChangeNotifier {
     return false;
   }
 
+  /// Revalidación silenciosa en segundo plano contra `/api/v1/license/validate`.
+  ///
+  /// Nunca bloquea ni cambia de estado: el arranque offline se mantiene con el
+  /// registro local. Si el servidor confirma, se actualiza la marca de última
+  /// verificación y la fecha de vencimiento conocida.
+  Future<void> validateSilently() async {
+    if (_state != OlyraLicenseState.active || _hardwareId == null) return;
+    if (_validating) return;
+    _validating = true;
+    try {
+      final credentials = await _credentials.read();
+      final ok = await _api.validate(
+        licenseKey: credentials?.licenseKey ?? '',
+        hwid: _hardwareId!,
+        token: _claims?.rawToken ?? credentials?.activationToken ?? '',
+        deviceName: credentials?.deviceName ?? _deviceName ?? '',
+      );
+      debugPrint('[OlyraLicense] validate_silently=$ok '
+          '(offline → se respeta el registro local)');
+    } catch (error) {
+      debugPrint('[OlyraLicense] validate_silently falló: $error');
+    } finally {
+      _validating = false;
+    }
+  }
+
   /// Quita la licencia local (desactivación manual).
   Future<void> deactivate() async {
     await _store?.clear();
+    await _credentials.clear();
     _claims = null;
+    _deviceName = null;
     _state = OlyraLicenseState.needsActivation;
     _lastMessage = 'Licencia local eliminada.';
     notifyListeners();
@@ -166,6 +226,39 @@ class OlyraLicenseController extends ChangeNotifier {
       publicKey: publicKey,
       expectedHwid: _hardwareId,
     );
+  }
+
+  void _accept(LicenseClaims claims, {String? deviceName, bool backfillFile = false}) {
+    _claims = claims;
+    _deviceName = deviceName;
+    _state = OlyraLicenseState.active;
+    _lastMessage =
+        'Licencia activa hasta ${_formatDate(claims.expiresAt)}.';
+    if (backfillFile && _store != null) {
+      // Migración desde secure storage hacia el archivo máquina-vinculado.
+      unawaited(_store!.write(claims.rawToken).catchError((_) {}));
+    }
+  }
+
+  void _scheduleSilentValidate([LicenseCredentials? credentials]) {
+    if (credentials != null && credentials.licenseKey.isEmpty) return;
+    unawaited(validateSilently());
+  }
+
+  String _friendlyError(LicenseServerException error) {
+    if (error.code == 'MAX_DEVICES_REACHED') {
+      return 'Límite de computadores alcanzado para esta licencia. '
+          'Administra tus dispositivos en tu panel de olyra.cl.';
+    }
+    if (error.code == 'KEY_EXPIRED') {
+      return 'Esta licencia está vencida. Renueva tu suscripción en olyra.cl.';
+    }
+    if (error.code == 'KEY_REVOKED') {
+      return 'Esta licencia fue revocada. Contacta soporte en olyra.cl.';
+    }
+    final code = error.statusCode;
+    if (code == null) return error.message;
+    return 'Error $code: ${error.message}';
   }
 
   String _formatDate(DateTime? value) {

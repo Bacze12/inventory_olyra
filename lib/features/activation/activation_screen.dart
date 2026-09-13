@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -16,17 +18,29 @@ class ActivationScreen extends StatefulWidget {
 
 class _ActivationScreenState extends State<ActivationScreen> {
   final _licenseKeyController = TextEditingController();
+  final _deviceNameController = TextEditingController();
   bool _copied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final hostname = Platform.isWindows ? Platform.localHostname : '';
+    if (hostname.isNotEmpty) _deviceNameController.text = hostname;
+  }
 
   @override
   void dispose() {
     _licenseKeyController.dispose();
+    _deviceNameController.dispose();
     super.dispose();
   }
 
   Future<void> _activate(OlyraLicenseController license) async {
     FocusScope.of(context).unfocus();
-    await license.activate(_licenseKeyController.text);
+    await license.activate(
+      _licenseKeyController.text,
+      deviceName: _deviceNameController.text,
+    );
   }
 
   @override
@@ -89,6 +103,24 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     const SizedBox(height: 20),
                     _hardwareCard(context, hardwareId),
                     const SizedBox(height: 16),
+                    TextField(
+                      controller: _deviceNameController,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      maxLength: 120,
+                      decoration: InputDecoration(
+                        labelText: 'Nombre del equipo',
+                        hintText: 'Caja 1',
+                        helperText:
+                            'Se guardará en el panel de olyra.cl para '
+                            'identificar este registro.',
+                        helperStyle: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant),
+                        prefixIcon: const Icon(Icons.desktop_windows_outlined),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: _licenseKeyController,
                       autofocus: true,

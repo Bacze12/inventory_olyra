@@ -15,6 +15,7 @@ import '../data/services/pairing_service.dart';
 import '../data/services/sync_service.dart';
 import '../features/activation/olyra_license_controller.dart';
 import '../features/activation/startup_gate.dart';
+import '../features/activation/license_credential_store.dart';
 import '../features/license/license_service.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
@@ -22,7 +23,7 @@ import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
 import '../features/sync/backup_service.dart';
 import '../features/sync/cloud_sync_manager.dart';
-import '../services/hardware_identity.dart';
+import '../services/hardware_id_service.dart';
 import '../views/pos/cart_provider.dart';
 import 'theme/app_theme.dart';
 
@@ -90,25 +91,31 @@ class InventarioApp extends StatelessWidget {
         Provider<SupabaseGateway>(
           create: (_) => SupabaseGateway.instance,
         ),
-        Provider<HardwareIdentity>(
-          create: (_) => HardwareIdentity(const FlutterSecureStorage()),
+        Provider<HardwareIdService>(
+          create: (_) => HardwareIdService(const FlutterSecureStorage()),
+        ),
+        Provider<LicenseCredentialStore>(
+          create: (_) => LicenseCredentialStore(const FlutterSecureStorage()),
         ),
         // ---- Licenciamiento offline (olyra.cl + JWT RS256) ----
         Provider<OlyraLicenseApi>(
-          create: (_) =>
-              OlyraLicenseApi(activationUrl: OlyraConfig.activationUrl),
+          create: (_) => OlyraLicenseApi(
+            activationUrl: OlyraConfig.activationUrl,
+            validateUrl: OlyraConfig.validateUrl,
+          ),
         ),
         ChangeNotifierProvider<OlyraLicenseController>(
           create: (ctx) => OlyraLicenseController(
-            hardware: ctx.read<HardwareIdentity>(),
+            hardware: ctx.read<HardwareIdService>(),
             api: ctx.read<OlyraLicenseApi>(),
+            credentials: ctx.read<LicenseCredentialStore>(),
             publicKeyPem: OlyraConfig.publicKeyPem,
           )..init(),
         ),
         ChangeNotifierProvider<LicenseService>(
           create: (ctx) => LicenseService(
             gateway: ctx.read<SupabaseGateway>(),
-            hardware: ctx.read<HardwareIdentity>(),
+            hardware: ctx.read<HardwareIdService>(),
             settings: ctx.read<SettingsRepository>(),
           )..init(),
         ),

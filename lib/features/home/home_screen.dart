@@ -13,8 +13,11 @@ import '../../data/repositories/sales_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/services/pairing_service.dart';
 import '../../data/services/sync_service.dart';
+import '../../services/scanner_input_service.dart';
 import '../../views/pairing/desktop_pairing_view.dart';
 import '../../views/pairing/mobile_scan_pairing_view.dart';
+import '../activation/license_about_dialog.dart';
+import '../activation/license_status_banner.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
@@ -43,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Escucha global de pistolas HID: solo enruta lecturas al formulario de
+    // producto cuando está abierto; nunca navega por sí mismo al POS.
+    ScannerInputService.instance.install();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
       UpdateService.checkForUpdates(
@@ -128,10 +134,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppConstants.appName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Acerca de · Licencia',
+            onPressed: () => showLicenseAboutDialog(context),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const LicenseStatusBanner(),
           _HeroSection(
             // En escritorio standalone no hay cámara móvil: el escaneo se hace
             // en el POS con pistola USB/Bluetooth o digitación manual.
@@ -205,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.qr_code_scanner,
                   title: 'Escáner',
                   subtitle: _isDesktop()
-                      ? 'Pistola escáner en el POS'
+                      ? 'Pistola en cualquier pantalla'
                       : 'Entradas y salidas',
                   onTap: () => _push(
                     context,

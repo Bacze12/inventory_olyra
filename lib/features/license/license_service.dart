@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/config/app_config.dart';
 import '../../data/cloud/supabase_gateway.dart';
 import '../../data/repositories/settings_repository.dart';
-import '../../services/hardware_identity.dart';
+import '../../services/hardware_id_service.dart';
 
 /// Estados posibles del licenciamiento del dispositivo.
 enum LicenseStatus {
@@ -42,7 +42,7 @@ class CloudLicenseNotReadyException implements Exception {
 /// Validación de licencia por hardware de BodegaFlow POS.
 ///
 /// Flujo:
-///   1. Obtiene el `hardware_id` local (MachineGuid / UUID persistido).
+///   1. Obtiene el `hardware_id` local (sello SHA-256 de placa/CPU persistido).
 ///   2. Exige sesión de usuario (la licencia pertenece a `auth.uid()`).
 ///   3. Llama a la RPC `fn_validate_device` (SECURITY DEFINER, scopeado al
 ///      usuario) y guarda el resultado en SQLite para uso offline.
@@ -54,14 +54,14 @@ class CloudLicenseNotReadyException implements Exception {
 class LicenseService extends ChangeNotifier {
   LicenseService({
     required SupabaseGateway gateway,
-    required HardwareIdentity hardware,
+    required HardwareIdService hardware,
     required SettingsRepository settings,
   })  : _gateway = gateway,
         _hardware = hardware,
         _settings = settings;
 
   final SupabaseGateway _gateway;
-  final HardwareIdentity _hardware;
+  final HardwareIdService _hardware;
   final SettingsRepository _settings;
 
   /// Ventana de gracia sin conexión tras una validación exitosa.

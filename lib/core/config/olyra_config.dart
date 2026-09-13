@@ -5,6 +5,9 @@ class OlyraConfig {
   /// Endpoint de activación online (primer uso únicamente).
   static const String activationUrl = 'https://olyra.cl/api/v1/license/activate';
 
+  /// Endpoint de revalidación silenciosa en segundo plano (offline-safe).
+  static const String validateUrl = 'https://olyra.cl/api/v1/license/validate';
+
   /// Nombre del archivo de licencia cifrado en el directorio local.
   static const String licenseFileName = 'license.dat';
 

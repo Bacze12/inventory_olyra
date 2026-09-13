@@ -16,6 +16,7 @@ import '../../features/license/license_service.dart';
 import '../../features/products/product_form_screen.dart';
 import '../../features/products/product_provider.dart';
 import '../../features/sales/sales_provider.dart';
+import '../../services/scanner_input_service.dart';
 import '../sales/sales_history_view.dart';
 import 'cart_item.dart';
 import 'cart_provider.dart';
@@ -37,7 +38,8 @@ class PosDesktopView extends StatefulWidget {
   State<PosDesktopView> createState() => _PosDesktopViewState();
 }
 
-class _PosDesktopViewState extends State<PosDesktopView> {
+class _PosDesktopViewState extends State<PosDesktopView>
+    implements ScannerInputSink {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
@@ -49,7 +51,7 @@ class _PosDesktopViewState extends State<PosDesktopView> {
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_hardwareKey);
+    ScannerInputService.instance.register(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<ProductProvider>().load();
@@ -59,11 +61,19 @@ class _PosDesktopViewState extends State<PosDesktopView> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_hardwareKey);
+    ScannerInputService.instance.unregister(this);
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
+
+  @override
+  void clearBuffer() {
+    _gunBuffer.clear();
+  }
+
+  @override
+  bool handleGunKey(KeyEvent event) => _hardwareKey(event);
 
   /// Escucha global de teclado para pistolas USB/Bluetooth (emulan teclado).
   /// Acumula caracteres; al recibir Enter con el foco FUERA del buscador
