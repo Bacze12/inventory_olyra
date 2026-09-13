@@ -5,7 +5,7 @@
 ; ============================================================
 #define MyAppName "ScanFlow"
 #define MyAppPublisher "cl.bodega"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.1.1"
 #define MyAppExeName "scanflow.exe"
 [Setup]
 AppId={{FE6004E3-1E52-42F6-8A4B-C23CDC4D2E2C}
@@ -31,13 +31,14 @@ DisableWelcomePage=no
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\windows\runner\resources\app_icon.ico"; DestDir: "{app}\resources"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\resources\app_icon.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]

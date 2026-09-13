@@ -9,16 +9,20 @@ import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/formatters.dart';
+import '../../data/models/product.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/services/pairing_service.dart';
 import '../../data/services/sync_service.dart';
+import '../../services/global_scanner_redirect.dart';
 import '../../services/scanner_input_service.dart';
 import '../../views/pairing/desktop_pairing_view.dart';
 import '../../views/pairing/mobile_scan_pairing_view.dart';
 import '../activation/license_about_dialog.dart';
 import '../activation/license_status_banner.dart';
+import '../products/product_form_screen.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
@@ -51,6 +55,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // Escucha global de pistolas HID: solo enruta lecturas al formulario de
     // producto cuando está abierto; nunca navega por sí mismo al POS.
     ScannerInputService.instance.install();
+    // Fuera de la vista de ventas (gestión de inventario) una lectura de la
+    // pistola redirige a la pantalla "Registrar / Editar Producto".
+    ScannerInputService.instance
+        .register(GlobalGunRedirect(_redirectScannedBarcode));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
       UpdateService.checkForUpdates(
@@ -93,6 +101,40 @@ class _HomeScreenState extends State<HomeScreen> {
         'http://$ip:${SyncServer.defaultPort}',
       );
     }
+  }
+
+  /// Redirige una lectura de la pistola HID (fuera de la vista de ventas) a la
+  /// pantalla "Registrar / Editar Producto":
+  ///
+  /// * El código YA existe en la base local → abre la ficha del producto para
+  ///   editar stock/precio.
+  /// * El código NO existe → abre "Nuevo producto" con el código pre-rellenado.
+  Future<void> _redirectScannedBarcode(String raw) async {
+    final code = normalizeBarcode(raw);
+    if (code.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    Product? product;
+    try {
+      product = await context.read<ProductRepository>().byBarcode(code);
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo consultar el código en la base local'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => product != null
+            ? ProductFormScreen(product: product)
+            : ProductFormScreen(initialBarcode: code),
+      ),
+    );
   }
 
   Future<void> _syncNow(BuildContext context) async {
