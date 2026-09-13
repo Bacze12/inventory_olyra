@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../services/windows_update_service.dart';
 import '../home/home_screen.dart';
 import 'activation_screen.dart';
@@ -57,8 +56,7 @@ class _StartupUpdateWatcherState extends State<_StartupUpdateWatcher> {
     _triggered = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final settings = context.read<SettingsRepository>();
-      await WindowsUpdateService.checkAndPrompt(context, settings);
+      await WindowsUpdateService.checkForUpdates(context);
     });
   }
 

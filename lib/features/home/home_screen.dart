@@ -4,6 +4,7 @@ import 'dart:io' show InternetAddress, Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
@@ -24,6 +25,7 @@ import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
 import '../../services/update_service.dart';
+import '../../services/windows_update_service.dart';
 import '../../views/pos/pos_desktop_view.dart';
 import '../../views/sales/sales_history_view.dart';
 import '../license/license_service.dart';
@@ -119,6 +121,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _searchUpdates() async {
+    if (kIsWeb || !Platform.isWindows) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Buscando actualizaciones…')),
+      );
+
+    final result = await WindowsUpdateService.forceCheckForUpdates(context);
+    if (!mounted) return;
+
+    final info = await PackageInfo.fromPlatform();
+    final String message = switch (result) {
+      UpdateCheckResult.updateAvailable =>
+        'Tienes una nueva versión disponible',
+      UpdateCheckResult.notAvailable =>
+        'Tienes la última versión instalada (v${info.version})',
+      UpdateCheckResult.failed =>
+        'No se pudo conectar al servidor de actualizaciones',
+    };
+
+    if (result == UpdateCheckResult.updateAvailable) {
+      // forceCheckForUpdates ya desplegó el modal de actualización.
+      messenger.hideCurrentSnackBar();
+      return;
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _push(BuildContext context, Widget screen) async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => screen),
@@ -138,7 +172,10 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.info_outline),
             tooltip: 'Acerca de · Licencia',
-            onPressed: () => showLicenseAboutDialog(context),
+            onPressed: () => showLicenseAboutDialog(
+              context,
+              onSearchUpdates: _searchUpdates,
+            ),
           ),
         ],
       ),

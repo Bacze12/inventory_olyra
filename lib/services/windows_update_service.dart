@@ -7,9 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
-
-import '../data/repositories/settings_repository.dart';
-import 'update_service.dart' show UpdateService;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Metadatos de una versión publicada en el manifest de olyra.cl.
 class UpdateManifest {
@@ -22,45 +20,45 @@ class UpdateManifest {
     this.fileName,
   });
 
-  /// Versión remota (SemVer: major.minor.patch, p. ej. "1.5.0").
   final String version;
-
-  /// Build remota (entero como string, opcional; desempata SemVer iguales).
   final String? buildNumber;
-
-  /// URL pública del instalador `.exe`.
   final String downloadUrl;
-
-  /// Notas de la versión mostradas en el diálogo.
   final String? releaseNotes;
-
-  /// Si es obligatoria, no se ofrece "Recordar más tarde".
   final bool mandatory;
-
-  /// Nombre sugerido para el archivo temporal (default: scanflow_update.exe).
   final String? fileName;
 }
 
+/// Resultado de una comprobación manual de actualizaciones, para que la UI
+/// pueda dar feedback según el caso.
+enum UpdateCheckResult { notAvailable, updateAvailable, failed }
+
 /// Sistema de actualización automática para Windows (instalador `.exe`).
 ///
-/// 1. Consulta `https://www.olyra.cl/api/v1/app/version`.
-/// 2. Compara SemVer contra la versión instalada ([package_info_plus]).
-/// 3. Si hay una versión más nueva, ofrece descargar; descarga en
-///    `Directory.systemTemp` con barra de progreso.
-/// 4. Ejecuta el instalador silencioso (Inno Setup) y cierra la app
-///    (`exit(0)`) para liberar los binarios y permitir la sobrescritura.
+/// * **Chequeo único**: se invoca una sola vez al arrancar la app (tras el
+///   primer frame con licencia activa); no existen timers ni polling.
+/// * **Silencioso**: errores de red/parseo quedan atrapados en try/catch y
+///   debugPrint; la app nunca se bloquea por el comprobador.
+/// * **Cooldown 24 h**: solo se muestra el diálogo de actualización una vez
+///   cada [kPromptCooldown]. La marca temporal se almacena en
+///   `SharedPreferences` y se escribe **antes** de presentar el modal para
+///   que, si la app se cierra durante la descarga, no vuelva a preguntar.
 class WindowsUpdateService {
   WindowsUpdateService._();
 
-  static const String kManifestUrl = 'https://www.olyra.cl/api/v1/app/version';
-  static const Duration kTimeout = Duration(seconds: 15);
+  static const String kManifestUrl =
+      'https://olyra.cl/api/v1/app/version?slug=bodegaflow';
 
-  /// Clave de cooldown compartida con [UpdateService].
-  static const String kLastPromptKey = UpdateService.kLastPromptKey;
-  static const Duration kPromptCooldown = UpdateService.kPromptCooldown;
+  /// Timeout corto: máximo 5 segundos para no ralentizar el arranque.
+  static const Duration kTimeout = Duration(seconds: 5);
 
-  /// Consulta y parsea el manifest de versión. Devuelve `null` ante cualquier
-  /// error de red/formato (la app arranca igual, sin bloquearse).
+  static const String kLastPromptKey = 'last_update_prompt_timestamp';
+  static const Duration kPromptCooldown = Duration(hours: 24);
+
+  // ------------------------------------------------------------------
+  // 1. Consulta al servidor
+  // ------------------------------------------------------------------
+
+  /// GET al manifest. Devuelve `null` ante cualquier error de red o formato.
   static Future<UpdateManifest?> fetchManifest() async {
     try {
       final res = await http.get(Uri.parse(kManifestUrl)).timeout(kTimeout);
@@ -69,9 +67,8 @@ class WindowsUpdateService {
       if (decoded is! Map) return null;
       final map = Map<String, dynamic>.from(decoded);
 
-      final version = (map['version'] ?? map['latest'] ?? '')
-          .toString()
-          .trim();
+      final version =
+          (map['version'] ?? map['latest'] ?? '').toString().trim();
       final url = (map['download_url'] ??
               map['url'] ??
               map['download'] ??
@@ -103,10 +100,11 @@ class WindowsUpdateService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // 2. Comparación SemVer
+  // ------------------------------------------------------------------
+
   /// `true` si la versión remota es más nueva que la instalada.
-  ///
-  /// Compara SemVer por partes (major.minor.patch) y, en empate, la build
-  /// numérica cuando ambas existan.
   static bool isNewer(
     UpdateManifest remote,
     String installedVersion,
@@ -132,65 +130,98 @@ class WindowsUpdateService {
       caseSensitive: false,
     ).firstMatch(raw.trim());
     if (match == null) return null;
-    final p1 = int.tryParse(match.group(1) ?? '') ?? 0;
-    final p2 = int.tryParse(match.group(2) ?? '') ?? 0;
-    final p3 = int.tryParse(match.group(3) ?? '') ?? 0;
-    return [p1, p2, p3];
+    return [
+      int.tryParse(match.group(1) ?? '') ?? 0,
+      int.tryParse(match.group(2) ?? '') ?? 0,
+      int.tryParse(match.group(3) ?? '') ?? 0,
+    ];
   }
 
-  /// Unico punto de entrada: comprueba el manifest y, si corresponde, muestra
-  /// el diálogo de actualización. [force] omite el cooldown de 24 h.
-  static Future<void> checkAndPrompt(
-    BuildContext context,
-    SettingsRepository settings, {
+  // ------------------------------------------------------------------
+  // 3. Punto de entrada único (llamado al arrancar la app)
+  // ------------------------------------------------------------------
+
+  /// Comprueba el manifest una sola vez y, si corresponde y pasó el cooldown
+  /// de 24 h, muestra el diálogo de actualización.
+  ///
+  /// Si la petición falla, el usuario está offline o el parseo da inválido,
+  /// el error queda silenciado y la app continúa sin interrupciones.
+  static Future<void> checkForUpdates(
+    BuildContext context, {
     bool force = false,
   }) async {
-    if (kIsWeb || !Platform.isWindows) return;
+    await _performCheck(context, force: force);
+  }
+
+  /// Comprobación manual desde la UI: ignora el cooldown de 24 h
+  /// ([kLastPromptKey]) y devuelve [UpdateCheckResult] para que la interfaz
+  /// muestre "última versión", abra el modal o avise de falla de conexión.
+  static Future<UpdateCheckResult> forceCheckForUpdates(
+    BuildContext context,
+  ) =>
+      _performCheck(context, force: true);
+
+  static Future<UpdateCheckResult> _performCheck(
+    BuildContext context, {
+    required bool force,
+  }) async {
+    if (kIsWeb || !Platform.isWindows) return UpdateCheckResult.failed;
     try {
       final manifest = await fetchManifest();
-      if (manifest == null) return;
+      if (manifest == null) return UpdateCheckResult.failed;
 
       final info = await PackageInfo.fromPlatform();
-      if (!isNewer(manifest, info.version, info.buildNumber)) return;
+      if (!isNewer(manifest, info.version, info.buildNumber)) {
+        return UpdateCheckResult.notAvailable;
+      }
 
       if (!force) {
-        final lastPrompt = await settings.get(kLastPromptKey);
-        final last =
-            lastPrompt == null ? null : DateTime.tryParse(lastPrompt);
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(kLastPromptKey);
+        final last = raw == null ? null : DateTime.tryParse(raw);
         if (last != null &&
-            DateTime.now().difference(last) < kPromptCooldown) {
-          return;
+            DateTime.now().difference(last).abs() < kPromptCooldown) {
+          return UpdateCheckResult.notAvailable;
         }
       }
-      if (!context.mounted) return;
+
+      if (!context.mounted) return UpdateCheckResult.failed;
+
+      // Se persiste la marca ANTES de mostrar el diálogo: si la app se cierra
+      // durante la descarga, no volverá a preguntar dentro de 24 h.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(kLastPromptKey, DateTime.now().toIso8601String());
+
+      if (!context.mounted) return UpdateCheckResult.failed;
 
       final go = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) => _UpdateAvailableDialog(
+        builder: (_) => _UpdateAvailableDialog(
           manifest: manifest,
           installedVersion: info.version,
         ),
       );
 
-      // Cooldown: no volver a preguntar en 24 h (acepte o rechace).
-      await settings.set(kLastPromptKey, DateTime.now().toIso8601String());
-
-      if (go != true) return;
-      if (!context.mounted) return;
+      if (go != true || !context.mounted) return UpdateCheckResult.updateAvailable;
 
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (_) => _WindowsDownloadDialog(manifest: manifest),
       );
+      return UpdateCheckResult.updateAvailable;
     } catch (error) {
       debugPrint('UPDATE_CHECK_ERROR: $error');
+      return UpdateCheckResult.failed;
     }
   }
 }
 
-/// Diálogo de "Actualización disponible" con notas de versión y acciones.
+// ------------------------------------------------------------------
+// Diálogo de "Actualización disponible"
+// ------------------------------------------------------------------
+
 class _UpdateAvailableDialog extends StatelessWidget {
   const _UpdateAvailableDialog({
     required this.manifest,
@@ -205,7 +236,7 @@ class _UpdateAvailableDialog extends StatelessWidget {
     final notes = manifest.releaseNotes;
     return AlertDialog(
       icon: const Icon(Icons.system_update_alt, size: 40),
-      title: const Text('Actualización disponible'),
+      title: Text('Nueva actualización disponible (v${manifest.version})'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
         child: Column(
@@ -213,8 +244,8 @@ class _UpdateAvailableDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Hay una versión nueva (${manifest.version}). '
-              'Instalada: $installedVersion.',
+              'Hay una versión nueva disponible. '
+              'Instalada: v$installedVersion.',
             ),
             if (notes != null && notes.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -231,9 +262,7 @@ class _UpdateAvailableDialog extends StatelessWidget {
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: SingleChildScrollView(
-                  child: Text(notes),
-                ),
+                child: SingleChildScrollView(child: Text(notes)),
               ),
             ],
             if (manifest.mandatory) ...[
@@ -263,8 +292,10 @@ class _UpdateAvailableDialog extends StatelessWidget {
   }
 }
 
-/// Diálogo de descarga con barra de progreso; al terminar ejecuta el
-/// instalador y cierra la aplicación.
+// ------------------------------------------------------------------
+// Diálogo de descarga con progreso → instalador silencioso → exit(0)
+// ------------------------------------------------------------------
+
 class _WindowsDownloadDialog extends StatefulWidget {
   const _WindowsDownloadDialog({required this.manifest});
 
@@ -337,7 +368,6 @@ class _WindowsDownloadDialogState extends State<_WindowsDownloadDialog> {
           received += chunk.length;
           sink.add(chunk);
           final now = DateTime.now();
-          // Actualizar la UI a lo sumo cada 120 ms para no saturar el árbol.
           if (total > 0 &&
               now.difference(lastUpdateAt).inMilliseconds >= 120) {
             lastUpdateAt = now;
@@ -364,29 +394,19 @@ class _WindowsDownloadDialogState extends State<_WindowsDownloadDialog> {
   }
 
   Future<void> _launchInstaller(String installerPath) async {
-    try {
-      final process = await Process.start(
-        installerPath,
-        const ['/VERYSILENT', '/SUPPRESSMSGBOXES'],
-        mode: ProcessStartMode.detachedWithStdio,
-        workingDirectory: Directory.systemTemp.path,
-      );
-      debugPrint('UPDATE_INSTALLER_PID=${process.pid}');
-
-      // Espera mínima para que el instalador tome el control y luego cierra
-      // la app: así el .exe actual queda libre y el instalador puede
-      // sobrescribirlo sin bloqueo de archivo.
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      if (mounted) setState(() => _finished = true);
-      exit(0);
-    } catch (error) {
-      throw Exception('No se pudo ejecutar el instalador: $error');
-    }
+    final process = await Process.start(
+      installerPath,
+      const ['/VERYSILENT', '/SUPPRESSMSGBOXES'],
+      mode: ProcessStartMode.detachedWithStdio,
+      workingDirectory: Directory.systemTemp.path,
+    );
+    debugPrint('UPDATE_INSTALLER_PID=${process.pid}');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (mounted) setState(() => _finished = true);
+    exit(0);
   }
 
-  void _close() {
-    Navigator.of(context).pop();
-  }
+  void _close() => Navigator.of(context).pop();
 
   @override
   Widget build(BuildContext context) {
@@ -412,7 +432,9 @@ class _WindowsDownloadDialogState extends State<_WindowsDownloadDialog> {
       actions: [
         TextButton(
           onPressed: _failed || _finished ? _close : null,
-          child: Text(_failed ? 'Cerrar' : (_progress == 1 ? 'Cerrar' : 'Cancelar')),
+          child: Text(
+            _failed || _finished ? 'Cerrar' : 'Cancelar',
+          ),
         ),
       ],
     );
