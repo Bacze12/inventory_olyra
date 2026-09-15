@@ -3,11 +3,16 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../data/models/product.dart';
 import '../../data/repositories/product_repository.dart';
+import '../activation/olyra_license_controller.dart';
 
 class ProductProvider extends ChangeNotifier {
-  ProductProvider(this._repository);
+  /// [license] opcional: si se inyecta (nivel superior del árbol), [save] lee
+  /// el `user_app_id` de sus claims sin usar Provider frente a un árbol que
+  /// todavía no lo provee.
+  ProductProvider(this._repository, [this._license]);
 
   final ProductRepository _repository;
+  final OlyraLicenseController? _license;
 
   List<Product> _products = const [];
   List<Product> get products => _products;
@@ -50,10 +55,15 @@ class ProductProvider extends ChangeNotifier {
 
   Future<String?> save(Product draft) async {
     try {
-      if (draft.id == null) {
-        await _repository.insert(draft);
+      // Asigna la cuenta actual (user_app_id) al producto antes de persistir,
+      // alineando el catálogo local con `pos_products` de la nube. En
+      // instalaciones sin licencia activa la resuelve a null y la fila queda
+      // sin asignar (columna nullable).
+      final scoped = draft.copyWith(userAppId: _currentUserAppId());
+      if (scoped.id == null) {
+        await _repository.insert(scoped);
       } else {
-        await _repository.update(draft);
+        await _repository.update(scoped);
       }
       await load();
       return null;
@@ -61,10 +71,15 @@ class ProductProvider extends ChangeNotifier {
       if (e.isUniqueConstraintError()) {
         return 'Ya existe un producto con ese código de barras';
       }
-      return 'No se pudo guardar el producto';
-    } catch (_) {
-      return 'No se pudo guardar el producto';
+      return 'No se pudo guardar el producto: $e';
+    } catch (e) {
+      return 'No se pudo guardar el producto: $e';
     }
+  }
+
+  String? _currentUserAppId() {
+    final value = _license?.claims?.payload['app_id']?.toString();
+    return (value == null || value.isEmpty) ? null : value;
   }
 
   Future<String?> delete(Product product) async {

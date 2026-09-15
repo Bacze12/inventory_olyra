@@ -5,7 +5,7 @@
 ; ============================================================
 #define MyAppName "ScanFlow"
 #define MyAppPublisher "cl.bodega"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.3.0"
 #define MyAppExeName "scanflow.exe"
 [Setup]
 AppId={{FE6004E3-1E52-42F6-8A4B-C23CDC4D2E2C}

@@ -208,6 +208,32 @@ class OlyraLicenseController extends ChangeNotifier {
     }
   }
 
+  /// Revalidación online explícita (botón "Revalidar" de la nube).
+  ///
+  /// A diferencia de [validateSilently], devuelve si el servidor confirmó la
+  /// licencia; la UI usa el resultado para pintar "Nube Activa · Sincronizado".
+  Future<bool> validateNow() async {
+    if (_state != OlyraLicenseState.active || _hardwareId == null) return false;
+    if (_validating) return false;
+    _validating = true;
+    try {
+      final credentials = await _credentials.read();
+      final ok = await _api.validate(
+        licenseKey: credentials?.licenseKey ?? '',
+        hwid: _hardwareId!,
+        token: _claims?.rawToken ?? credentials?.activationToken ?? '',
+        deviceName: credentials?.deviceName ?? _deviceName ?? '',
+      );
+      debugPrint('[OlyraLicense] validate_now=$ok');
+      return ok;
+    } catch (error) {
+      debugPrint('[OlyraLicense] validate_now falló: $error');
+      return false;
+    } finally {
+      _validating = false;
+    }
+  }
+
   /// Quita la licencia local (desactivación manual).
   Future<void> deactivate() async {
     await _store?.clear();

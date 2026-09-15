@@ -6,7 +6,7 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._internal();
 
-  static const int _version = 5;
+  static const int _version = 6;
 
   Database? _database;
 
@@ -86,12 +86,21 @@ class AppDatabase {
       await db.execute(
           'ALTER TABLE sales ADD COLUMN stock_warning INTEGER NOT NULL DEFAULT 0');
     }
+    if (oldVersion < 6) {
+      // Cuenta (user_app_id) a la que pertenece cada producto. Alinea el
+      // catálogo local con `pos_products` de la nube: cada bodega/entitlement
+      // tiene su propio set de códigos. Nullable para instalaciones existentes.
+      await db.execute('ALTER TABLE products ADD COLUMN user_app_id TEXT');
+      await db.execute(
+          'CREATE INDEX idx_products_scope ON products(user_app_id)');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_app_id TEXT,
         name TEXT NOT NULL,
         barcode TEXT NOT NULL UNIQUE,
         quantity INTEGER NOT NULL DEFAULT 0,
@@ -103,6 +112,7 @@ class AppDatabase {
       )
     ''');
     await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
+    await db.execute('CREATE INDEX idx_products_scope ON products(user_app_id)');
 
     await db.execute('''
       CREATE TABLE movements (

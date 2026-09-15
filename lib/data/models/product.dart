@@ -1,6 +1,7 @@
 class Product {
   const Product({
     this.id,
+    this.userAppId,
     required this.name,
     required this.barcode,
     required this.quantity,
@@ -12,6 +13,10 @@ class Product {
   });
 
   final int? id;
+
+  /// Cuenta de la nube (`user_app_id`) a la que pertenece el producto.
+  /// Nil en instalaciones previas a la migración v6 o en datos sin asignar.
+  final String? userAppId;
   final String name;
   final String barcode;
   final int quantity;
@@ -27,6 +32,7 @@ class Product {
 
   factory Product.fromMap(Map<String, Object?> map) => Product(
         id: map['id'] as int?,
+        userAppId: map['user_app_id'] as String?,
         name: map['name'] as String,
         barcode: map['barcode'] as String,
         quantity: map['quantity'] as int,
@@ -39,6 +45,7 @@ class Product {
 
   Map<String, Object?> toMap() => {
         'id': id,
+        'user_app_id': userAppId,
         'name': name,
         'barcode': barcode,
         'quantity': quantity,
@@ -51,6 +58,7 @@ class Product {
 
   Product copyWith({
     int? id,
+    String? userAppId,
     String? name,
     String? barcode,
     int? quantity,
@@ -62,6 +70,7 @@ class Product {
   }) =>
       Product(
         id: id ?? this.id,
+        userAppId: userAppId ?? this.userAppId,
         name: name ?? this.name,
         barcode: barcode ?? this.barcode,
         quantity: quantity ?? this.quantity,
