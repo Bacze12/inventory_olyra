@@ -32,9 +32,8 @@ import '../../services/update_service.dart';
 import '../../services/windows_update_service.dart';
 import '../../views/pos/pos_desktop_view.dart';
 import '../../views/sales/sales_history_view.dart';
-import '../license/license_service.dart';
-import '../sync/cloud_sync_manager.dart';
 import '../sync/cloud_sync_panel.dart';
+import '../sync/olyra_cloud_sync.dart';
 
 bool _isDesktop() {
   if (kIsWeb) return false;
@@ -52,11 +51,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Escucha global de pistolas HID: solo enruta lecturas al formulario de
-    // producto cuando está abierto; nunca navega por sí mismo al POS.
+    // Escucha global de pistolas HID: SOLO enruta lecturas al formulario de
+    // producto (Inventario/Registro); nunca navega por sí mismo al POS.
     ScannerInputService.instance.install();
     // Fuera de la vista de ventas (gestión de inventario) una lectura de la
-    // pistola redirige a la pantalla "Registrar / Editar Producto".
+    // pistola redirige a la pantalla "Registrar / Editar Producto", que es la
+    // vista predeterminada del escáner en el Menú Principal.
     ScannerInputService.instance
         .register(GlobalGunRedirect(_redirectScannedBarcode));
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,13 +103,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Evita apilar formularios si la pistola entrega el código dos veces
+  /// seguidas (o el usuario escanea mientras ya se está navegando).
+  bool _scanRedirectInProgress = false;
+
   /// Redirige una lectura de la pistola HID (fuera de la vista de ventas) a la
   /// pantalla "Registrar / Editar Producto":
   ///
   /// * El código YA existe en la base local → abre la ficha del producto para
   ///   editar stock/precio.
   /// * El código NO existe → abre "Nuevo producto" con el código pre-rellenado.
+  ///
+  /// NUNCA abre el punto de venta desde el Menú Principal.
   Future<void> _redirectScannedBarcode(String raw) async {
+    if (_scanRedirectInProgress) return;
+    _scanRedirectInProgress = true;
+    try {
+      await _openProductFromScan(raw);
+    } finally {
+      _scanRedirectInProgress = false;
+    }
+  }
+
+  Future<void> _openProductFromScan(String raw) async {
     final code = normalizeBarcode(raw);
     if (code.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -226,12 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const LicenseStatusBanner(),
           _HeroSection(
-            // En escritorio standalone no hay cámara móvil: el escaneo se hace
-            // en el POS con pistola USB/Bluetooth o digitación manual.
-            onScan: () => _push(
-              context,
-              _isDesktop() ? const PosDesktopView() : const ScannerScreen(),
-            ),
+            // "Escanear ahora" abre el formulario de inventario (nuevo
+            // producto con foco en código), NO el punto de venta.
+            onScan: () => _push(context, const ProductFormScreen()),
           ),
           const SizedBox(height: 12),
           if (_isDesktop() && AppConfig.enableMobileSync) ...[
@@ -465,25 +478,21 @@ class _CloudSyncTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final license = context.watch<LicenseService>();
-    final sync = context.watch<CloudSyncManager>();
+    final cloud = context.watch<OlyraCloudSync>();
 
-    final String subtitle;
-    if (license.status == LicenseStatus.needsLogin) {
-      subtitle = 'Inicia sesión para sincronizar la licencia';
-    } else if (license.status == LicenseStatus.invalid) {
-      subtitle = 'Licencia inválida: ventas bloqueadas';
-    } else if (sync.state == CloudSyncState.syncing) {
-      subtitle = 'Sincronizando…';
-    } else if (sync.state == CloudSyncState.error) {
-      subtitle = 'Error de sincronización · reintento automático';
-    } else {
-      subtitle = 'Nube lista · validar, sincronizar y respaldar';
-    }
+    final String subtitle = switch (cloud.state) {
+      OlyraCloudState.needsActivation =>
+        'Licencia no activa: activa antes de sincronizar',
+      OlyraCloudState.validating => 'Validando con olyra.cl…',
+      OlyraCloudState.syncing => 'Sincronizando…',
+      OlyraCloudState.error => 'Error de sincronización · reintenta',
+      OlyraCloudState.active => 'Nube Activa · Sincronizado',
+      OlyraCloudState.unconfigured => 'Nube lista · revalida para conectar',
+    };
 
     return _MenuTile(
       icon: Icons.cloud_sync_outlined,
-      title: 'Sincronización y respaldo',
+      title: 'Nube y respaldo',
       subtitle: subtitle,
       onTap: () => showCloudSyncPanel(context),
     );

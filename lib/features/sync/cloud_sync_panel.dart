@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../license/license_service.dart';
-import 'backup_service.dart';
-import 'cloud_sync_manager.dart';
+import '../activation/olyra_license_controller.dart';
+import 'olyra_cloud_sync.dart';
 
-/// Abre el diálogo de sincronización/respaldo de la nube (BodegaFlow POS).
+/// Abre el diálogo de sincronización/respaldo de la nube (olyra.cl).
 Future<void> showCloudSyncPanel(BuildContext context) {
   return showDialog<void>(
     context: context,
@@ -13,8 +12,9 @@ Future<void> showCloudSyncPanel(BuildContext context) {
   );
 }
 
-/// Panel de estado y acciones de la nube: licencia por hardware, sincronización
-/// offline-first y respaldos comprimidos.
+/// Panel de estado y acciones de la nube Olyra: usa las credenciales de la
+/// activación (`license_key` + `user_app_id`) para revalidar y hacer respaldo
+/// (ventas + movimientos) contra `olyra.cl/api/v1/pos/sync`.
 class CloudSyncPanel extends StatefulWidget {
   const CloudSyncPanel({super.key});
 
@@ -23,137 +23,113 @@ class CloudSyncPanel extends StatefulWidget {
 }
 
 class _CloudSyncPanelState extends State<CloudSyncPanel> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _signingIn = false;
-  bool _busyBackup = false;
   String? _lastMessage;
   bool _isError = false;
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _signIn() async {
-    final license = context.read<LicenseService>();
-    setState(() {
-      _signingIn = true;
-      _isError = false;
-      _lastMessage = null;
-    });
-    try {
-      await license.signIn(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      _passwordController.clear();
-      _lastMessage = 'Sesión iniciada.';
-      _isError = false;
-    } catch (error) {
-      _lastMessage = 'No se pudo iniciar sesión: $error';
-      _isError = true;
-    } finally {
-      if (mounted) setState(() => _signingIn = false);
-    }
-  }
-
   Future<void> _validate() async {
-    final license = context.read<LicenseService>();
+    final cloud = context.read<OlyraCloudSync>();
     setState(() {
       _isError = false;
-      _lastMessage = 'Validando licencia…';
+      _lastMessage = 'Validando con olyra.cl…';
     });
-    try {
-      await license.refresh();
-      _lastMessage = switch (license.status) {
-        LicenseStatus.active => 'Licencia válida en este equipo.',
-        LicenseStatus.invalid => 'Licencia inválida o expirada en este equipo.',
-        LicenseStatus.needsLogin => 'Inicia sesión para validar la licencia.',
-        _ => 'No hay nube configurada.',
-      };
-      _isError = license.status != LicenseStatus.active;
-    } catch (error) {
-      _lastMessage = 'Error al validar: $error';
-      _isError = true;
-    }
-    if (mounted) setState(() {});
+    final ok = await cloud.validate();
+    if (!mounted) return;
+    setState(() {
+      if (ok) {
+        _lastMessage = 'Licencia confirmada: nube activa y sincronizada.';
+        _isError = false;
+      } else {
+        final error = cloud.lastError;
+        _lastMessage = error == null
+            ? 'La licencia no fue confirmada en este equipo.'
+            : 'No se pudo validar: $error';
+        _isError = true;
+      }
+    });
   }
 
   Future<void> _syncNow() async {
-    final sync = context.read<CloudSyncManager>();
+    final cloud = context.read<OlyraCloudSync>();
     setState(() {
       _isError = false;
-      _lastMessage = 'Sincronizando…';
+      _lastMessage = 'Sincronizando con la nube…';
     });
     try {
-      final result = await sync.maybeSyncNow();
-      _lastMessage = result == null
-          ? 'Sincronización disparada.'
-          : result.describe();
-      _isError = false;
+      final result = await cloud.syncNow();
+      if (!mounted) return;
+      setState(() {
+        _lastMessage = result.describe();
+        _isError = false;
+      });
     } catch (error) {
-      _lastMessage = 'Error de sincronización: $error';
-      _isError = true;
+      if (!mounted) return;
+      setState(() {
+        _lastMessage = 'No se pudo sincronizar: $error';
+        _isError = true;
+      });
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _backup() async {
-    final backup = context.read<BackupService>();
+    final cloud = context.read<OlyraCloudSync>();
     setState(() {
-      _busyBackup = true;
       _isError = false;
-      _lastMessage = 'Generando respaldo…';
+      _lastMessage = 'Preparando respaldo de ventas y movimientos…';
     });
     try {
-      final path = await backup.createBackup();
-      _lastMessage = 'Respaldo subido: $path';
-      _isError = false;
+      final result = await cloud.syncNow();
+      if (!mounted) return;
+      setState(() {
+        _lastMessage = result.hasChanges
+            ? 'Respaldo subido a la nube · ${result.describe()}'
+            : 'Respaldo al día: no hay cambios pendientes.';
+        _isError = false;
+      });
     } catch (error) {
-      _lastMessage = 'No se pudo respaldar: $error';
-      _isError = true;
-    } finally {
-      if (mounted) setState(() => _busyBackup = false);
+      if (!mounted) return;
+      setState(() {
+        _lastMessage = 'No se pudo respaldar: $error';
+        _isError = true;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final license = context.watch<LicenseService>();
-    final sync = context.watch<CloudSyncManager>();
-    final backup = context.watch<BackupService>();
+    final cloud = context.watch<OlyraCloudSync>();
+    final license = context.watch<OlyraLicenseController>();
 
     return AlertDialog(
-      title: const Text('Sincronización y respaldo'),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _licenseSection(license),
+      title: const Text('Nube y respaldo'),
+      // scrollable: el contenido (3 secciones + mensaje) puede exceder la
+      // altura de la ventana; con este flag AlertDialog lo hace scrolleable y
+      // evita el RenderFlex overflow (franja gris) en pantallas pequeñas.
+      scrollable: true,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _guard(() => _connectionSection(context, cloud, license)),
+            const SizedBox(height: 12),
+            _guard(() => _syncSection(context, cloud)),
+            const SizedBox(height: 12),
+            _guard(() => _backupSection(context, cloud)),
+            if (_lastMessage != null) ...[
               const SizedBox(height: 12),
-              _syncSection(sync),
-              const SizedBox(height: 12),
-              _backupSection(backup),
-              if (_lastMessage != null) ...[
-                const SizedBox(height: 12),
-                Card(
-                  color: _isError
-                      ? Theme.of(context).colorScheme.errorContainer
-                      : Theme.of(context).colorScheme.secondaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Text(_lastMessage!, style: const TextStyle(fontSize: 13)),
-                  ),
+              Card(
+                color: _isError
+                    ? Theme.of(context).colorScheme.errorContainer
+                    : Theme.of(context).colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(_lastMessage!,
+                      style: const TextStyle(fontSize: 13)),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
       actions: [
@@ -165,39 +141,72 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
     );
   }
 
-  Widget _licenseSection(LicenseService license) {
-    final status = license.status;
-    final (icon, color, text) = switch (status) {
-      LicenseStatus.unconfigured => (
-          Icons.cloud_off,
-          Theme.of(context).colorScheme.outline,
-          'Nube desactivada (modo 100% local).',
+  /// Fallback visual: si una sección falla (p. ej. la nube aún no termina de
+  /// inicializarse), se muestra un aviso discreto en vez de romper el diálogo.
+  Widget _guard(Widget Function() builder) {
+    try {
+      return builder();
+    } catch (_) {
+      return const _Section(
+        title: 'Nube',
+        icon: Icons.cloud_off_outlined,
+        child: Text(
+          'El estado de la nube está inicializándose. Intenta de nuevo en un momento.',
+          style: TextStyle(fontSize: 13),
         ),
-      LicenseStatus.needsLogin => (
-          Icons.login,
-          Theme.of(context).colorScheme.tertiary,
-          'Inicia sesión para vincular la licencia.',
+      );
+    }
+  }
+
+  Widget _connectionSection(
+    BuildContext context,
+    OlyraCloudSync cloud,
+    OlyraLicenseController license,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, color, text) = switch (cloud.state) {
+      OlyraCloudState.unconfigured => (
+          Icons.cloud_sync_outlined,
+          scheme.outline,
+          'Nube lista para vincular: pulsa "Revalidar".',
         ),
-      LicenseStatus.loading => (
-          Icons.hourglass_top,
-          Theme.of(context).colorScheme.primary,
-          'Validando dispositivo…',
-        ),
-      LicenseStatus.active => (
-          Icons.verified_user_outlined,
-          Theme.of(context).colorScheme.primary,
-          'Licencia activa.',
-        ),
-      LicenseStatus.invalid => (
+      OlyraCloudState.needsActivation => (
           Icons.gpp_bad_outlined,
-          Theme.of(context).colorScheme.error,
-          'Licencia inválida o expirada: ventas bloqueadas.',
+          scheme.error,
+          'Licencia no activa: activa el equipo para usar la nube.',
+        ),
+      OlyraCloudState.validating => (
+          Icons.hourglass_top,
+          scheme.primary,
+          'Validando con olyra.cl…',
+        ),
+      OlyraCloudState.syncing => (
+          Icons.sync,
+          scheme.primary,
+          'Sincronizando con la nube…',
+        ),
+      OlyraCloudState.active => (
+          Icons.cloud_done_outlined,
+          scheme.primary,
+          'Nube Activa · Sincronizado',
+        ),
+      OlyraCloudState.error => (
+          Icons.cloud_off_outlined,
+          scheme.error,
+          'Error al conectar la nube.',
         ),
     };
 
     return _Section(
-      title: 'Licencia del equipo',
+      title: 'Conexión a la nube',
       icon: Icons.key_outlined,
+      actions: [
+        TextButton.icon(
+          onPressed: _validate,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Revalidar'),
+        ),
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -212,100 +221,54 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
               ),
             ],
           ),
-          if (license.hardwareId.isNotEmpty)
+          if (cloud.lastError != null && cloud.state == OlyraCloudState.error)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Hardware: ${license.hardwareId}',
-                style: const TextStyle(fontSize: 12),
-              ),
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('${cloud.lastError}',
+                  style: TextStyle(fontSize: 12, color: scheme.error)),
             ),
-          if (status == LicenseStatus.needsLogin) _signInForm(),
-          if (status != LicenseStatus.needsLogin)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _validate,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Revalidar'),
-              ),
-            ),
+          if (license.hardwareId != null && license.hardwareId!.isNotEmpty)
+            _infoRow('Hardware', license.hardwareId!),
+          if (cloud.deviceName.isNotEmpty) _infoRow('Equipo', cloud.deviceName),
+          if (cloud.userAppId.isNotEmpty)
+            _infoRow('Cuenta (user_app_id)', cloud.userAppId),
         ],
       ),
     );
   }
 
-  Widget _signInForm() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        children: [
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              isDense: true,
-              prefixIcon: Icon(Icons.mail_outline),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            onSubmitted: (_) => _signIn(),
-            decoration: const InputDecoration(
-              labelText: 'Contraseña',
-              isDense: true,
-              prefixIcon: Icon(Icons.lock_outline),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonal(
-              onPressed: _signingIn ? null : _signIn,
-              child: _signingIn
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Iniciar sesión'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _syncSection(CloudSyncManager sync) {
-    final (icon, color, text) = switch (sync.state) {
-      CloudSyncState.unconfigured => (
+  Widget _syncSection(BuildContext context, OlyraCloudSync cloud) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, color, text) = switch (cloud.state) {
+      OlyraCloudState.unconfigured => (
           Icons.cloud_off,
-          Theme.of(context).colorScheme.outline,
-          'Sin configurar.',
+          scheme.outline,
+          'Sin validar todavía.',
         ),
-      CloudSyncState.needsLogin => (
-          Icons.login,
-          Theme.of(context).colorScheme.tertiary,
-          'Se requiere sesión.',
+      OlyraCloudState.needsActivation => (
+          Icons.gpp_bad_outlined,
+          scheme.error,
+          'Licencia no activa.',
         ),
-      CloudSyncState.idle => (
-          Icons.cloud_done_outlined,
-          Theme.of(context).colorScheme.primary,
-          'Al día.',
+      OlyraCloudState.validating => (
+          Icons.hourglass_top,
+          scheme.primary,
+          'Validando…',
         ),
-      CloudSyncState.syncing => (
+      OlyraCloudState.syncing => (
           Icons.sync,
-          Theme.of(context).colorScheme.primary,
+          scheme.primary,
           'Sincronizando…',
         ),
-      CloudSyncState.error => (
+      OlyraCloudState.active => (
+          Icons.cloud_done_outlined,
+          scheme.primary,
+          'Nube Activa · Sincronizado',
+        ),
+      OlyraCloudState.error => (
           Icons.cloud_off_outlined,
-          Theme.of(context).colorScheme.error,
-          'Error — reintento automático programado.',
+          scheme.error,
+          'Error — reintenta.',
         ),
     };
 
@@ -314,7 +277,7 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
       icon: Icons.cloud_sync_outlined,
       actions: [
         TextButton.icon(
-          onPressed: () => _syncNow(),
+          onPressed: _syncNow,
           icon: const Icon(Icons.sync, size: 18),
           label: const Text('Sincronizar ahora'),
         ),
@@ -329,22 +292,15 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
               Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
             ],
           ),
-          if (sync.lastError != null && sync.state == CloudSyncState.error)
+          if (cloud.lastSync != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('${sync.lastError}',
-                  style: TextStyle(
-                      fontSize: 12, color: Theme.of(context).colorScheme.error)),
-            ),
-          if (sync.lastSuccess != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text('Último sync: ${_fmt(sync.lastSuccess)}',
+              child: Text('Último sync: ${_fmt(cloud.lastSync)}',
                   style: const TextStyle(fontSize: 12)),
             ),
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text('${sync.pendingSales} venta(s) pendientes en local',
+            child: Text('${cloud.pendingSales} venta(s) pendientes en local',
                 style: const TextStyle(fontSize: 12)),
           ),
         ],
@@ -352,13 +308,15 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
     );
   }
 
-  Widget _backupSection(BackupService backup) {
+  Widget _backupSection(BuildContext context, OlyraCloudSync cloud) {
     return _Section(
       title: 'Respaldo de la bodega',
       icon: Icons.architecture_outlined,
       actions: [
         TextButton.icon(
-          onPressed: _busyBackup || backup.running ? null : _backup,
+          onPressed: cloud.state == OlyraCloudState.syncing
+              ? null
+              : _backup,
           icon: const Icon(Icons.upload_file_outlined, size: 18),
           label: const Text('Subir respaldo'),
         ),
@@ -366,22 +324,54 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (backup.lastBackupAt != null)
-            Text('Último: ${_fmt(backup.lastBackupAt)} (${backup.lastBackupPath})',
-                style: const TextStyle(fontSize: 12)),
-          if (backup.running)
+          if (cloud.lastSync != null)
+            Text(
+              'Último respaldo: ${_fmt(cloud.lastSync)} '
+              '(${cloud.lastSalesPushed} venta(s) · '
+              '${cloud.lastMovementsPushed} movimiento(s))',
+              style: const TextStyle(fontSize: 12),
+            )
+          else
+            const Text(
+              'Sube el respaldo de ventas y movimientos a la nube olyra.cl.',
+              style: TextStyle(fontSize: 12),
+            ),
+          if (cloud.state == OlyraCloudState.syncing)
             const Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text('Generando y subiendo…',
                   style: TextStyle(fontSize: 12)),
             ),
-          if (backup.lastError != null)
+          if (cloud.lastError != null && cloud.state == OlyraCloudState.error)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('${backup.lastError}',
+              child: Text('${cloud.lastError}',
                   style: TextStyle(
                       fontSize: 12, color: Theme.of(context).colorScheme.error)),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );

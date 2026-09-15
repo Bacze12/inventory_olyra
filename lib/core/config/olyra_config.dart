@@ -8,6 +8,11 @@ class OlyraConfig {
   /// Endpoint de revalidación silenciosa en segundo plano (offline-safe).
   static const String validateUrl = 'https://olyra.cl/api/v1/license/validate';
 
+  /// Endpoint de respaldo/sincronización de la nube (ventas + movimientos).
+  /// Acepta `POST` batch upsert hacia las tablas `pos_sales`/`pos_movements`
+  /// vinculadas al `user_app_id` de la licencia.
+  static const String posSyncUrl = 'https://olyra.cl/api/v1/pos/sync';
+
   /// Nombre del archivo de licencia cifrado en el directorio local.
   static const String licenseFileName = 'license.dat';
 

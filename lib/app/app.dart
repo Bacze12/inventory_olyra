@@ -7,6 +7,7 @@ import '../core/config/olyra_config.dart';
 import '../data/cloud/supabase_gateway.dart';
 import '../data/database/app_database.dart';
 import '../data/remote/olyra_license_api.dart';
+import '../data/remote/olyra_pos_api.dart';
 import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
@@ -23,6 +24,7 @@ import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
 import '../features/sync/backup_service.dart';
 import '../features/sync/cloud_sync_manager.dart';
+import '../features/sync/olyra_cloud_sync.dart';
 import '../services/hardware_id_service.dart';
 import '../views/pos/cart_provider.dart';
 import 'theme/app_theme.dart';
@@ -66,9 +68,39 @@ class InventarioApp extends StatelessWidget {
             movementRepository: ctx.read<MovementRepository>(),
           ),
         ),
+        // ---- Licenciamiento offline (olyra.cl + JWT RS256) ----
+        // OlyraLicenseController es TOP-LEVEL: se instancia ANTES de cualquier
+        // consumidor (ProductProvider, OlyraCloudSync) para que sus `create`
+        // puedan inyectarlo por constructor sin que `context` intente leer un
+        // Provider que aún no es ancestro (ProviderNotFoundError).
+        Provider<SupabaseGateway>(
+          create: (_) => SupabaseGateway.instance,
+        ),
+        Provider<HardwareIdService>(
+          create: (_) => HardwareIdService(const FlutterSecureStorage()),
+        ),
+        Provider<LicenseCredentialStore>(
+          create: (_) => LicenseCredentialStore(const FlutterSecureStorage()),
+        ),
+        Provider<OlyraLicenseApi>(
+          create: (_) => OlyraLicenseApi(
+            activationUrl: OlyraConfig.activationUrl,
+            validateUrl: OlyraConfig.validateUrl,
+          ),
+        ),
+        ChangeNotifierProvider<OlyraLicenseController>(
+          create: (ctx) => OlyraLicenseController(
+            hardware: ctx.read<HardwareIdService>(),
+            api: ctx.read<OlyraLicenseApi>(),
+            credentials: ctx.read<LicenseCredentialStore>(),
+            publicKeyPem: OlyraConfig.publicKeyPem,
+          )..init(),
+        ),
         ChangeNotifierProvider<ProductProvider>(
-          create: (ctx) =>
-              ProductProvider(ctx.read<ProductRepository>()),
+          create: (ctx) => ProductProvider(
+            ctx.read<ProductRepository>(),
+            ctx.read<OlyraLicenseController>(),
+          ),
         ),
         ChangeNotifierProvider<ScannerProvider>(
           create: (ctx) => ScannerProvider(
@@ -85,33 +117,25 @@ class InventarioApp extends StatelessWidget {
             settingsRepository: ctx.read<SettingsRepository>(),
           )..init(),
         ),
+        // ---- Nube Olyra: respaldo y sincronización vía APIs de olyra.cl. ----
+        // Usa las credenciales de la activación (license_key + user_app_id);
+        // se auto-desactiva si la licencia no está activa en el equipo.
+        Provider<OlyraPosApi>(
+          create: (_) => OlyraPosApi(syncUrl: OlyraConfig.posSyncUrl),
+        ),
+        ChangeNotifierProvider<OlyraCloudSync>(
+          create: (ctx) => OlyraCloudSync(
+            license: ctx.read<OlyraLicenseController>(),
+            credentials: ctx.read<LicenseCredentialStore>(),
+            api: ctx.read<OlyraPosApi>(),
+            sales: ctx.read<SalesRepository>(),
+            movements: ctx.read<MovementRepository>(),
+            settings: ctx.read<SettingsRepository>(),
+          )..start(),
+        ),
         // ---- Nube (Supabase): licencia, sincronización y respaldos. ----
         // Se auto-desactivan cuando no hay credenciales compiladas, así la app
         // nunca pierde su modo 100% local.
-        Provider<SupabaseGateway>(
-          create: (_) => SupabaseGateway.instance,
-        ),
-        Provider<HardwareIdService>(
-          create: (_) => HardwareIdService(const FlutterSecureStorage()),
-        ),
-        Provider<LicenseCredentialStore>(
-          create: (_) => LicenseCredentialStore(const FlutterSecureStorage()),
-        ),
-        // ---- Licenciamiento offline (olyra.cl + JWT RS256) ----
-        Provider<OlyraLicenseApi>(
-          create: (_) => OlyraLicenseApi(
-            activationUrl: OlyraConfig.activationUrl,
-            validateUrl: OlyraConfig.validateUrl,
-          ),
-        ),
-        ChangeNotifierProvider<OlyraLicenseController>(
-          create: (ctx) => OlyraLicenseController(
-            hardware: ctx.read<HardwareIdService>(),
-            api: ctx.read<OlyraLicenseApi>(),
-            credentials: ctx.read<LicenseCredentialStore>(),
-            publicKeyPem: OlyraConfig.publicKeyPem,
-          )..init(),
-        ),
         ChangeNotifierProvider<LicenseService>(
           create: (ctx) => LicenseService(
             gateway: ctx.read<SupabaseGateway>(),
