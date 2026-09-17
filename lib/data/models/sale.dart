@@ -45,6 +45,7 @@ class Sale {
     this.deviceToken,
     this.synced = false,
     this.stockWarning = false,
+    this.shiftId,
   });
 
   final int? id;
@@ -69,6 +70,10 @@ class Sale {
   /// en la PC (sync offline-first): se avisa en el historial sin bloquear.
   final bool stockWarning;
 
+  /// Turno de caja que registró la venta (`pos_shifts.id`, sin FK a propósito:
+  /// las ventas previas al módulo Turnos y Cajas tienen `null`).
+  final String? shiftId;
+
   bool get canBeAnnulled => status == SaleStatus.completada;
 
   /// Folio legible, ej. `#0042`.
@@ -88,6 +93,7 @@ class Sale {
         deviceToken: map['device_token'] as String?,
         synced: (map['synced'] as int? ?? 0) != 0,
         stockWarning: (map['stock_warning'] as int? ?? 0) != 0,
+        shiftId: map['shift_id'] as String?,
       );
 
   Sale copyWith({
@@ -112,6 +118,7 @@ class Sale {
         deviceToken: deviceToken ?? this.deviceToken,
         synced: synced ?? this.synced,
         stockWarning: stockWarning ?? this.stockWarning,
+        shiftId: shiftId,
       );
 }
 

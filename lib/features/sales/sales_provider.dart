@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/models/product.dart';
 import '../../data/models/sale.dart';
 import '../../data/repositories/movement_repository.dart';
+import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../views/pos/cart_item.dart';
 
@@ -39,10 +41,12 @@ class SalesProvider extends ChangeNotifier {
   SalesProvider({
     required this.salesRepository,
     required this.movementRepository,
+    required this.productRepository,
   });
 
   final SalesRepository salesRepository;
   final MovementRepository movementRepository;
+  final ProductRepository productRepository;
 
   List<Sale> _sales = const [];
   bool _loading = false;
@@ -115,6 +119,7 @@ class SalesProvider extends ChangeNotifier {
     required double total,
     double? received,
     required double change,
+    String? shiftId,
   }) async {
     try {
       final saleItems = [
@@ -137,6 +142,7 @@ class SalesProvider extends ChangeNotifier {
         total: total,
         received: received,
         change: change,
+        shiftId: shiftId,
       );
     } catch (_) {
       return null;
@@ -150,16 +156,42 @@ class SalesProvider extends ChangeNotifier {
     if (id == null || !sale.canBeAnnulled) return 'La venta no se puede anular';
     try {
       final full = await salesRepository.byId(id);
+      final notRestored = <String>[];
       for (final item in full.items) {
-        final productId = item.productId;
-        if (productId == null) continue;
-        await movementRepository.adjustStock(productId, item.quantity);
+        final ok = await _restoreStock(item);
+        if (!ok) notRestored.add(item.productName);
       }
       await salesRepository.setStatus(id, SaleStatus.anulada);
       await load();
-      return null;
+      // NUNCA mentir en el aviso: si algún ítem no se pudo reponer se dice.
+      // (antes, las ventas remotas con product_id nulo se saltaban el stock
+      //  en silencio y aparecía "stock devuelto" sin que se devolviera nada).
+      return notRestored.isEmpty
+          ? null
+          : 'Venta anulada, pero NO se repuso el stock de: '
+              '${notRestored.join(', ')}';
     } catch (_) {
       return 'No se pudo anular la venta';
     }
+  }
+
+  /// Repone al inventario lo vendido en una línea del ticket.
+  ///
+  /// Las ventas remotas (teléfono → PC) se guardan SIN `product_id` local:
+  /// su stock se descontó por código de barras (`deductStockFromSync`). Por
+  /// eso se resuelve primero por id local y, si no existe, por código; si el
+  /// producto ya no está en el catálogo se reporta (no se silencia).
+  Future<bool> _restoreStock(SaleItem item) async {
+    final barcode = item.barcode?.trim() ?? '';
+    Product? product = item.productId == null
+        ? null
+        : await productRepository.byId(item.productId!);
+    if (product == null && barcode.isNotEmpty) {
+      product = await productRepository.byBarcode(barcode);
+    }
+    final productId = product?.id;
+    if (productId == null) return false;
+    await movementRepository.adjustStock(productId, item.quantity);
+    return true;
   }
 }

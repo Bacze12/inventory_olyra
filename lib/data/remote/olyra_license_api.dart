@@ -21,6 +21,15 @@ class LicenseServerException implements Exception {
   String toString() => message;
 }
 
+/// Resultado de una revalidación online incluyendo el `user_app_id` que el
+/// servidor entrega (UUID de la fila `user_apps`, no el `app_id` del producto).
+class OlyraValidateResult {
+  const OlyraValidateResult({required this.ok, this.userAppId});
+
+  final bool ok;
+  final String? userAppId;
+}
+
 /// Cliente HTTP de licencia (olyra.cl).
 ///
 /// - [activate]: POST `{ license_key, hwid, device_name }` → `{ token }`.
@@ -112,8 +121,26 @@ class OlyraLicenseApi {
     required String hwid,
     required String token,
     String deviceName = '',
+  }) async =>
+      (await validateWithMeta(
+        licenseKey: licenseKey,
+        hwid: hwid,
+        token: token,
+        deviceName: deviceName,
+      ))
+          .ok;
+
+  /// Igual que [validate] pero además expone los metadatos frescos de la
+  /// respuesta (p. ej. `user_app_id`, ya emitido por el servidor).
+  Future<OlyraValidateResult> validateWithMeta({
+    required String licenseKey,
+    required String hwid,
+    required String token,
+    String deviceName = '',
   }) async {
-    if (licenseKey.isEmpty || token.isEmpty) return false;
+    if (licenseKey.isEmpty || token.isEmpty) {
+      return const OlyraValidateResult(ok: false);
+    }
 
     final payload = jsonEncode({
       'license_key': licenseKey,
@@ -133,20 +160,26 @@ class OlyraLicenseApi {
           )
           .timeout(timeout);
     } catch (_) {
-      return false;
+      return const OlyraValidateResult(ok: false);
     }
 
     if (response.statusCode != 200) {
       debugPrint('[OlyraLicense] validate_status=${response.statusCode} '
           'body=${response.body}');
-      return false;
+      return const OlyraValidateResult(ok: false);
     }
 
     final decoded = _decodeBody(response);
+    final freshUserAppId = decoded?['user_app_id'] as String?;
     debugPrint('[OlyraLicense] validate OK '
         'server_status=${decoded?['status']} '
-        'expires_at=${decoded?['expires_at']}');
-    return true;
+        'expires_at=${decoded?['expires_at']} '
+        'user_app_id=${freshUserAppId?.isNotEmpty == true}');
+    return OlyraValidateResult(
+      ok: true,
+      userAppId:
+          (freshUserAppId == null || freshUserAppId.isEmpty) ? null : freshUserAppId,
+    );
   }
 
   Map<String, dynamic>? _decodeBody(http.Response response) {

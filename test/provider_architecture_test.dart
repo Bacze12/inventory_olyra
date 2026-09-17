@@ -15,6 +15,7 @@ import 'package:scanflow/data/repositories/movement_repository.dart';
 import 'package:scanflow/data/repositories/product_repository.dart';
 import 'package:scanflow/data/repositories/sales_repository.dart';
 import 'package:scanflow/data/repositories/settings_repository.dart';
+import 'package:scanflow/data/repositories/shift_repository.dart';
 import 'package:scanflow/features/activation/license_credential_store.dart';
 import 'package:scanflow/features/activation/olyra_license_controller.dart';
 import 'package:scanflow/features/products/product_provider.dart';
@@ -59,6 +60,9 @@ List<SingleChildWidget> _repos() => <SingleChildWidget>[
       Provider<SettingsRepository>(
         create: (_) => SettingsRepository(AppDatabase.instance),
       ),
+      Provider<ShiftRepository>(
+        create: (_) => ShiftRepository(AppDatabase.instance),
+      ),
     ];
 
 List<SingleChildWidget> _consumers() => <SingleChildWidget>[
@@ -75,7 +79,9 @@ List<SingleChildWidget> _consumers() => <SingleChildWidget>[
           api: ctx.read<OlyraPosApi>(),
           sales: ctx.read<SalesRepository>(),
           movements: ctx.read<MovementRepository>(),
+          products: ctx.read<ProductRepository>(),
           settings: ctx.read<SettingsRepository>(),
+          shifts: ctx.read<ShiftRepository>(),
         ),
       ),
     ];

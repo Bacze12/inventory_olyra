@@ -12,6 +12,7 @@ import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../data/repositories/sales_repository.dart';
 import '../data/repositories/settings_repository.dart';
+import '../data/repositories/shift_repository.dart';
 import '../data/services/pairing_service.dart';
 import '../data/services/sync_service.dart';
 import '../features/activation/olyra_license_controller.dart';
@@ -22,6 +23,7 @@ import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
 import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
+import '../features/shifts/shift_provider.dart';
 import '../features/sync/backup_service.dart';
 import '../features/sync/cloud_sync_manager.dart';
 import '../features/sync/olyra_cloud_sync.dart';
@@ -66,7 +68,19 @@ class InventarioApp extends StatelessWidget {
           create: (ctx) => SalesProvider(
             salesRepository: ctx.read<SalesRepository>(),
             movementRepository: ctx.read<MovementRepository>(),
+            productRepository: ctx.read<ProductRepository>(),
           ),
+        ),
+        Provider<ShiftRepository>(
+          create: (_) => ShiftRepository(AppDatabase.instance),
+        ),
+        // ---- Turnos y Cajas ----
+        // Bloquea el POS sin turno abierto y maneja apertura/cierre/cuadre.
+        ChangeNotifierProvider<ShiftProvider>(
+          create: (ctx) => ShiftProvider(
+            ctx.read<ShiftRepository>(),
+            ctx.read<SettingsRepository>(),
+          )..start(),
         ),
         // ---- Licenciamiento offline (olyra.cl + JWT RS256) ----
         // OlyraLicenseController es TOP-LEVEL: se instancia ANTES de cualquier
@@ -130,7 +144,9 @@ class InventarioApp extends StatelessWidget {
             api: ctx.read<OlyraPosApi>(),
             sales: ctx.read<SalesRepository>(),
             movements: ctx.read<MovementRepository>(),
+            products: ctx.read<ProductRepository>(),
             settings: ctx.read<SettingsRepository>(),
+            shifts: ctx.read<ShiftRepository>(),
           )..start(),
         ),
         // ---- Nube (Supabase): licencia, sincronización y respaldos. ----
