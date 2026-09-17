@@ -1,4 +1,4 @@
-package cl.bodega.inventory_app
+package cl.bodegaflow.app
 
 import io.flutter.embedding.android.FlutterActivity
 

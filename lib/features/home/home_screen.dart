@@ -28,17 +28,6 @@ import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
-import '../../services/update_service.dart';
-import '../../services/windows_update_service.dart';
-import '../../views/pos/pos_desktop_view.dart';
-import '../../views/sales/sales_history_view.dart';
-import '../sync/cloud_sync_panel.dart';
-import '../sync/olyra_cloud_sync.dart';
-
-bool _isDesktop() {
-  if (kIsWeb) return false;
-  return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -61,11 +50,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .register(GlobalGunRedirect(_redirectScannedBarcode));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
-      UpdateService.checkForUpdates(
-        context,
-        context.read<SettingsRepository>(),
-      );
-      _bootstrapSyncServer(context);
     });
   }
 

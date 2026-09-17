@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Camera (mobile_scanner) -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -6,14 +7,17 @@
     <!-- Geolocation: requerida por el scanner ML Kit agrupado en algunos dispositivos -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- El plugin ota_update declara REQUEST_INSTALL_PACKAGES en su propio
+         manifest; lo forzamos a eliminarse del manifest mergeado. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+
     <!-- Almacenamiento / guardar PDF (Android < 10 share sheet, Android 10+ SAF) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- OTA update: permitir instalar el APK descargado -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Bluetooth (print_bluetooth_thermal / flutter_blue_plus) -->
     <uses-permission android:name="android.permission.BLUETOOTH"
@@ -25,7 +29,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
-        android:label="ScanFlow"
+        android:label="BodegaFlow"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
@@ -51,15 +55,15 @@
             android:name="flutterEmbedding"
             android:value="2" />
             <!-- CONFIGURACIÓN REQUERIDA PARA OTA_UPDATE -->
-        <provider
-            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
+        <!-- <provider
+            android:name="sk.khronos.ota_update.OtaUpdateFileProvider"
             android:authorities="${applicationId}.ota_update_provider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/filepaths" />
-        </provider>
+        </provider> -->
     </application>
     <queries>
         <intent>
