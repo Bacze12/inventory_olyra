@@ -38,14 +38,25 @@ dependencies:
   # Estado simple y ligero para la UI.
   provider: ^6.1.2
   http: ^1.6.0
+  shared_preferences: ^2.5.5
   ota_update: ^7.1.0
   package_info_plus: ^10.2.1
+  sqflite_common_ffi: ^2.4.2+1
+  sqlite3_flutter_libs: ^0.6.0+eol
+  qr_flutter: ^4.1.0
+  flutter_secure_storage: 10.0.0
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  supabase_flutter: ^2.17.2
+  connectivity_plus: ^7.3.1
+  pointycastle: ^4.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
+  path_provider_platform_interface: ^2.1.3
 
 # Configuración del generador de íconos
 flutter_launcher_icons:
@@ -53,6 +64,12 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/bodegaflow_icon.png"
   min_sdk_android: 21
+  # Windows: genera el .ico nativo del .exe (ventana y barra de tareas) con el
+  # logo oficial de la marca (BodegaFlow), 256×256.
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 256
 
 flutter:
   uses-material-design: true

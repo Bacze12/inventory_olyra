@@ -11,6 +11,23 @@ String formatDateTime(String iso) {
 
 String nowIso() => DateTime.now().toIso8601String();
 
+/// Formatea un monto en pesos chilenos: separador de miles con punto,
+/// decimales con coma (ej. "$12.345,60").
+String formatMoney(double amount) {
+  final negative = amount < 0;
+  final fixed = amount.abs().toStringAsFixed(2);
+  final parts = fixed.split('.');
+  final intPart = parts[0];
+  final decPart = parts[1];
+  final sb = StringBuffer();
+  for (var i = 0; i < intPart.length; i++) {
+    sb.write(intPart[i]);
+    final remaining = intPart.length - 1 - i;
+    if (remaining > 0 && remaining % 3 == 0) sb.write('.');
+  }
+  return '${negative ? '-' : ''}\$$sb.$decPart';
+}
+
 String fileStamp() {
   final now = DateTime.now();
   String two(int n) => n.toString().padLeft(2, '0');
