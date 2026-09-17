@@ -50,10 +50,17 @@ class OlyraLicenseController extends ChangeNotifier {
   LicenseFileStore? _store;
   LicenseClaims? _claims;
   String? _deviceName;
+  String? _userAppId;
   String? _activationError;
   String _lastMessage = '';
   bool _activating = false;
   bool _validating = false;
+
+  /// Round-trip de validación online en vuelo. Comparten la misma petición
+  /// la revalidación silenciosa de arranque y el botón "Revalidar" de la nube
+  /// (dos llamadas solapadas → una sola request; quien llegue segundo reusa
+  /// el resultado en lugar de devolver un falso negativo).
+  Future<OlyraValidateResult?>? _pendingValidate;
 
   OlyraLicenseState get state => _state;
   bool get isUnlocked => _state == OlyraLicenseState.active;
@@ -69,6 +76,18 @@ class OlyraLicenseController extends ChangeNotifier {
   /// Nombre con el que quedó registrado este equipo (p. ej. "Caja 1").
   String? get deviceName => _deviceName;
 
+  /// UUID de la `user_apps` (la bodega) a la que pertenecen los datos POS.
+  ///
+  /// Autoridad: claim firmado `user_app_id` del JWT cuando existe; si no
+  /// (licencias emitidas antes de v1.4), el valor que el servidor entregó en
+  /// activate/validate y que quedó persistido en `LicenseCredentialStore`. A
+  /// diferencia de [claims.app_id], NUNCA cae al `app_id` global del producto.
+  String? get userAppId {
+    final fromClaims = _claims?.payload['user_app_id']?.toString();
+    if (fromClaims != null && fromClaims.isNotEmpty) return fromClaims;
+    return (_userAppId == null || _userAppId!.isEmpty) ? null : _userAppId;
+  }
+
   /// Carga y verifica la licencia local. Bloquea el uso si no es válida.
   Future<void> init() async {
     try {
@@ -81,6 +100,7 @@ class OlyraLicenseController extends ChangeNotifier {
       if (credentials != null) {
         final claims = _verifyLocal(credentials.activationToken);
         if (claims != null) {
+          _userAppId = credentials.userAppId;
           _accept(claims, deviceName: credentials.deviceName, backfillFile: true);
           _scheduleSilentValidate(credentials);
           return;
@@ -149,15 +169,21 @@ class OlyraLicenseController extends ChangeNotifier {
       );
 
       await _store!.write(token);
+      final claimsUserAppId = claims.payload['user_app_id']?.toString();
       await _credentials.save(
         licenseKey: licenseKey.trim(),
         hardwareId: _hardwareId!,
         activationToken: token,
         deviceName: deviceName.isNotEmpty ? deviceName.trim() : null,
+        userAppId: (claimsUserAppId == null || claimsUserAppId.isEmpty)
+            ? null
+            : claimsUserAppId,
       );
       debugPrint('[OlyraLicense] token guardado en license.dat y secure storage');
 
       _claims = claims;
+      _userAppId =
+          (claimsUserAppId == null || claimsUserAppId.isEmpty) ? null : claimsUserAppId;
       _deviceName = deviceName.isNotEmpty ? deviceName.trim() : null;
       _state = OlyraLicenseState.active;
       _lastMessage = '¡Activado! Licencia válida hasta '
@@ -189,48 +215,68 @@ class OlyraLicenseController extends ChangeNotifier {
   /// verificación y la fecha de vencimiento conocida.
   Future<void> validateSilently() async {
     if (_state != OlyraLicenseState.active || _hardwareId == null) return;
-    if (_validating) return;
-    _validating = true;
-    try {
-      final credentials = await _credentials.read();
-      final ok = await _api.validate(
-        licenseKey: credentials?.licenseKey ?? '',
-        hwid: _hardwareId!,
-        token: _claims?.rawToken ?? credentials?.activationToken ?? '',
-        deviceName: credentials?.deviceName ?? _deviceName ?? '',
-      );
-      debugPrint('[OlyraLicense] validate_silently=$ok '
-          '(offline → se respeta el registro local)');
-    } catch (error) {
-      debugPrint('[OlyraLicense] validate_silently falló: $error');
-    } finally {
-      _validating = false;
+    final result = await _validateOnline();
+    if (result != null && result.ok && result.userAppId != null) {
+      _userAppId = result.userAppId;
+      await _credentials.saveUserAppId(result.userAppId!);
     }
+    debugPrint('[OlyraLicense] validate_silently=${result?.ok} '
+        '(offline → se respeta el registro local)');
   }
 
   /// Revalidación online explícita (botón "Revalidar" de la nube).
   ///
   /// A diferencia de [validateSilently], devuelve si el servidor confirmó la
   /// licencia; la UI usa el resultado para pintar "Nube Activa · Sincronizado".
+  /// El `user_app_id` fresco queda PERSISTIDO de inmediato (secure storage) y
+  /// el estado se notifica para que el modal se refresque al instante.
   Future<bool> validateNow() async {
     if (_state != OlyraLicenseState.active || _hardwareId == null) return false;
-    if (_validating) return false;
+    final result = await _validateOnline();
+    if (result != null && result.ok && result.userAppId != null) {
+      final userAppId = result.userAppId!;
+      if (_userAppId != userAppId) {
+        _userAppId = userAppId;
+        await _credentials.saveUserAppId(userAppId);
+        notifyListeners();
+      }
+    }
+    debugPrint('[OlyraLicense] validate_now=${result?.ok}');
+    return result?.ok ?? false;
+  }
+
+  /// Empuja la validación online contra `/api/v1/license/validate` y devuelve
+  /// su resultado (o `null` si no hubo respuesta). Si ya hay una en vuelo, se
+  /// reusa: jamás se disparan dos POST simultáneos ni se responde falso por
+  /// solapamiento.
+  Future<OlyraValidateResult?> _validateOnline() async {
+    final inFlight = _pendingValidate;
+    if (inFlight != null) return inFlight;
+
     _validating = true;
+    final hwid = _hardwareId!;
+    late final Future<OlyraValidateResult?> request;
+    request = () async {
+      try {
+        final credentials = await _credentials.read();
+        return await _api.validateWithMeta(
+          licenseKey: credentials?.licenseKey ?? '',
+          hwid: hwid,
+          token: _claims?.rawToken ?? credentials?.activationToken ?? '',
+          deviceName: credentials?.deviceName ?? _deviceName ?? '',
+        );
+      } catch (error) {
+        debugPrint('[OlyraLicense] validate online falló: $error');
+        return null;
+      } finally {
+        _validating = false;
+      }
+    }();
+    _pendingValidate = request;
     try {
-      final credentials = await _credentials.read();
-      final ok = await _api.validate(
-        licenseKey: credentials?.licenseKey ?? '',
-        hwid: _hardwareId!,
-        token: _claims?.rawToken ?? credentials?.activationToken ?? '',
-        deviceName: credentials?.deviceName ?? _deviceName ?? '',
-      );
-      debugPrint('[OlyraLicense] validate_now=$ok');
-      return ok;
-    } catch (error) {
-      debugPrint('[OlyraLicense] validate_now falló: $error');
-      return false;
+      return await request;
     } finally {
-      _validating = false;
+      if (identical(_pendingValidate, request)) _pendingValidate = null;
     }
   }
 
@@ -240,6 +286,7 @@ class OlyraLicenseController extends ChangeNotifier {
     await _credentials.clear();
     _claims = null;
     _deviceName = null;
+    _userAppId = null;
     _state = OlyraLicenseState.needsActivation;
     _lastMessage = 'Licencia local eliminada.';
     notifyListeners();

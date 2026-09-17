@@ -25,6 +25,7 @@ class SalesRepository {
     SaleStatus status = SaleStatus.completada,
     String? createdAt,
     bool stockWarning = false,
+    String? shiftId,
   }) async {
     final db = await _db.database;
     return db.transaction((txn) async {
@@ -41,6 +42,7 @@ class SalesRepository {
         'device_token': deviceToken,
         'synced': 0,
         'stock_warning': stockWarning ? 1 : 0,
+        'shift_id': shiftId,
         'created_at': now,
       });
       for (final item in items) {
@@ -142,8 +144,13 @@ class SalesRepository {
     return rows.isNotEmpty;
   }
 
-  /// Ventas locales pendientes de enviar al servidor de la PC.
-  Future<List<Sale>> listForSync() async {
+  /// Ventas locales pendientes de enviar al servidor (respaldo/nube).
+  ///
+  /// [getUnsyncedSales] es el DAO canónico del lote: `SELECT * FROM sales
+  /// WHERE synced = 0` (+ `sale_items`) sobre la MISMA base `.db` donde el POS
+  /// inserta al cobrar. Todo método de sync (Wi-Fi/PC y nube) debe leer acá
+  /// para jamás omitir una venta real.
+  Future<List<Sale>> getUnsyncedSales() async {
     final db = await _db.database;
     final rows = await db.query(
       'sales',
@@ -163,6 +170,18 @@ class SalesRepository {
     }
     return sales;
   }
+
+  /// Cuenta de ventas `synced = 0` (para el contador de la tarjeta de nube).
+  Future<int> countUnsyncedSales() async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM sales WHERE synced = 0',
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  /// Alias con el nombre histórico (usado por sync Wi-Fi/PC y tests).
+  Future<List<Sale>> listForSync() => getUnsyncedSales();
 
   Future<void> markSynced(List<int> ids) async {
     if (ids.isEmpty) return;

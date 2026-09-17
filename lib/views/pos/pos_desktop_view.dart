@@ -16,10 +16,14 @@ import '../../features/license/license_service.dart';
 import '../../features/products/product_form_screen.dart';
 import '../../features/products/product_provider.dart';
 import '../../features/sales/sales_provider.dart';
+import '../../features/shifts/shift_close_dialog.dart';
+import '../../features/shifts/shift_open_dialog.dart';
+import '../../features/shifts/shift_provider.dart';
 import '../../services/scanner_input_service.dart';
 import '../sales/sales_history_view.dart';
 import 'cart_item.dart';
 import 'cart_provider.dart';
+import 'ticket_z_dialog.dart';
 
 /// Vista base del Punto de Venta, optimizada para escritorio (Windows).
 ///
@@ -224,6 +228,19 @@ class _PosDesktopViewState extends State<PosDesktopView>
     final salesProvider = context.read<SalesProvider>();
     final productProvider = context.read<ProductProvider>();
 
+    // Gate por Turnos y Cajas: sin turno abierto no se puede vender.
+    final shifts = context.read<ShiftProvider>();
+    if (!shifts.hasActiveShift) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('Abre un turno de caja para comenzar a vender.'),
+          duration: Duration(seconds: 4),
+        ));
+      return;
+    }
+    final shiftId = shifts.activeShift?.id?.toString();
+
     // Bloqueo por licencia de hardware (solo si la nube ya respondió que el
     // dispositivo NO está autorizado).
     final license = context.read<LicenseService>();
@@ -303,6 +320,7 @@ class _PosDesktopViewState extends State<PosDesktopView>
           total: total,
           received: result.received,
           change: result.change,
+          shiftId: shiftId,
         );
 
     cart.clearCart();
@@ -318,6 +336,30 @@ class _PosDesktopViewState extends State<PosDesktopView>
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _openShiftDialog() async {
+    _searchFocus.unfocus();
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => const ShiftOpenDialog(),
+    );
+    _keepSearchFocus();
+  }
+
+  Future<void> _closeShiftDialog() async {
+    _searchFocus.unfocus();
+    final result = await showDialog<ShiftCloseResult>(
+      context: context,
+      builder: (_) => const ShiftCloseDialog(),
+    );
+    if (result != null && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => TicketZDialog(result: result),
+      );
+    }
+    _keepSearchFocus();
   }
 
   Future<void> _confirmClearCart() async {
@@ -356,6 +398,7 @@ class _PosDesktopViewState extends State<PosDesktopView>
   Widget build(BuildContext context) {
     final catalog = context.watch<ProductProvider>();
     final cart = context.watch<CartProvider>();
+    final shifts = context.watch<ShiftProvider>();
 
     final query = _query.trim().toLowerCase();
     final products = catalog.products.where((product) {
@@ -373,75 +416,143 @@ class _PosDesktopViewState extends State<PosDesktopView>
         autofocus: true,
         skipTraversal: true,
         onKeyEvent: _onKeyEvent,
-        child: Scaffold(
-          backgroundColor:
-              Theme.of(context).colorScheme.surfaceContainerLowest,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            leading: IconButton(
-              tooltip: 'Volver al menú',
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            title: const Text('Punto de venta'),
-            actions: [
-              TextButton.icon(
-                onPressed: () {
-                  _searchFocus.unfocus();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const SalesHistoryView(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.receipt_long_outlined),
-                label: const Text('Ver Ventas'),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Center(
-                  child: Text(
-                    cart.isEmpty
-                        ? 'Sin venta activa'
-                        : '${cart.totalUnits} ítem(s) · ${formatMoney(cart.total)}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+        // Caja cerrada ⇒ sin AppBar y sin retroceso: PopScope bloquea el
+        // retroceso por teclado/mouse; además se oculta TODA la barra de
+        // navegación superior. Con turno abierto, "Salir al menú" vive al
+        // EXTREMO DERECHO, separado por la info de la venta activa y por
+        // separadores, para que jamás se sobreponga con "Cerrar caja".
+        child: PopScope(
+          canPop: shifts.hasActiveShift,
+          child: Scaffold(
+            backgroundColor:
+                Theme.of(context).colorScheme.surfaceContainerLowest,
+            appBar: !shifts.hasActiveShift
+                ? null
+                : AppBar(
+                    automaticallyImplyLeading: false,
+                    title: const Text('Punto de venta'),
+                    actions: [
+                      Tooltip(
+                        message: 'Cerrar caja',
+                        child: TextButton.icon(
+                          onPressed: _closeShiftDialog,
+                          icon: const Icon(Icons.lock, size: 18),
+                          label: Text(shifts.registerName),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () {
+                          _searchFocus.unfocus();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SalesHistoryView(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.receipt_long_outlined),
+                        label: const Text('Ver Ventas'),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Center(
+                          child: Text(
+                            cart.isEmpty
+                                ? 'Sin venta activa'
+                                : '${cart.totalUnits} ítem(s) · ${formatMoney(cart.total)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        tooltip: 'Salir al menú',
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                   ),
-                ),
-              ),
-            ],
+            body: _buildBody(shifts, catalog, products, cart),
           ),
-          body: GestureDetector(
-            // Cualquier clic sobre zonas vacías devuelve el foco al buscador.
-            behavior: HitTestBehavior.translucent,
-            onTap: _keepSearchFocus,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    ShiftProvider shifts,
+    ProductProvider catalog,
+    List<Product> products,
+    CartProvider cart,
+  ) {
+    if (shifts.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (!shifts.hasActiveShift) return _buildShiftLocked(shifts);
+    return GestureDetector(
+      // Cualquier clic sobre zonas vacías devuelve el foco al buscador.
+      behavior: HitTestBehavior.translucent,
+      onTap: _keepSearchFocus,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSearchBar(),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildSearchBar(),
-                  const SizedBox(height: 12),
                   Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _buildCatalog(catalog, products),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: _buildTicket(cart),
-                        ),
-                      ],
-                    ),
+                    flex: 3,
+                    child: _buildCatalog(catalog, products),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: _buildTicket(cart),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildShiftLocked(ShiftProvider shifts) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 72, color: scheme.outline),
+          const SizedBox(height: 16),
+          Text(
+            'Caja ${shifts.registerName} cerrada',
+            style: theme.textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Abre el turno para comenzar a vender.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.outline),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: _openShiftDialog,
+            icon: const Icon(Icons.point_of_sale),
+            label: const Text('Abrir turno'),
+          ),
+        ],
       ),
     );
   }
@@ -1096,15 +1207,19 @@ class _TicketFooter extends StatelessWidget {
               minimumSize: const Size.fromHeight(52),
             ),
             icon: const Icon(Icons.payments_outlined),
-            label: const Text(
-              'COBRAR / FINALIZAR VENTA',
-              style: TextStyle(fontSize: 16),
+            label: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'COBRAR / FINALIZAR VENTA',
+                style: TextStyle(fontSize: 16),
+              ),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             'F12 o Enter: cobrar · Esc: vaciar venta',
             textAlign: TextAlign.center,
+            maxLines: 1,
             style: TextStyle(
               fontSize: 11,
               color: scheme.onSurfaceVariant,

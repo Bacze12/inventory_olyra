@@ -26,6 +26,18 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
   String? _lastMessage;
   bool _isError = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Al abrir el panel se releen los pendientes DE LA BD local
+    // (`SELECT * FROM sales WHERE synced = 0`), no el snapshot del arranque:
+    // si se cobraron ventas después de iniciar la app, acá ya se cuentan.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<OlyraCloudSync>().refreshPending();
+    });
+  }
+
   Future<void> _validate() async {
     final cloud = context.read<OlyraCloudSync>();
     setState(() {
@@ -74,15 +86,20 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
     final cloud = context.read<OlyraCloudSync>();
     setState(() {
       _isError = false;
-      _lastMessage = 'Preparando respaldo de ventas y movimientos…';
+      _lastMessage = 'Preparando respaldo de catálogo, ventas y movimientos…';
     });
     try {
+      // 1) Respaldo FÍSICO: captura el archivo `.sqlite` real de la app.
+      final localBackup = await cloud.createLocalBackup();
+      // 2) Respaldo en nube: payload JSON (ventas + movimientos + catálogo).
       final result = await cloud.syncNow();
       if (!mounted) return;
       setState(() {
         _lastMessage = result.hasChanges
-            ? 'Respaldo subido a la nube · ${result.describe()}'
-            : 'Respaldo al día: no hay cambios pendientes.';
+            ? 'Respaldo local · ${localBackup.path} · subido a la nube: '
+                '${result.describe()}'
+            : 'Respaldo al día en ${localBackup.path}: no hay cambios '
+                'pendientes en la nube.';
         _isError = false;
       });
     } catch (error) {
@@ -300,7 +317,10 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
             ),
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text('${cloud.pendingSales} venta(s) pendientes en local',
+            child: Text(
+                '${cloud.pendingSales} venta(s) · '
+                '${cloud.pendingShifts} turno(s) pendientes · '
+                '${cloud.catalogSize} producto(s) en catálogo',
                 style: const TextStyle(fontSize: 12)),
           ),
         ],
@@ -327,14 +347,25 @@ class _CloudSyncPanelState extends State<CloudSyncPanel> {
           if (cloud.lastSync != null)
             Text(
               'Último respaldo: ${_fmt(cloud.lastSync)} '
-              '(${cloud.lastSalesPushed} venta(s) · '
+              '(${cloud.lastProductsPushed} producto(s) · '
+              '${cloud.lastSalesPushed} venta(s) · '
+              '${cloud.lastShiftsPushed} turno(s) · '
               '${cloud.lastMovementsPushed} movimiento(s))',
               style: const TextStyle(fontSize: 12),
             )
           else
             const Text(
-              'Sube el respaldo de ventas y movimientos a la nube olyra.cl.',
+              'Sube el catálogo completo, las ventas y los movimientos a la nube olyra.cl.',
               style: TextStyle(fontSize: 12),
+            ),
+          if (cloud.lastLocalBackupPath != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Archivo local: ${cloud.lastLocalBackupPath} '
+                '(${cloud.lastLocalBackupSize} bytes)',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ),
           if (cloud.state == OlyraCloudState.syncing)
             const Padding(

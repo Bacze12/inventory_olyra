@@ -77,8 +77,11 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  /// UUID de la `user_apps` (bodega) del claim/acuerdo de licencia. Usa
+  /// [OlyraLicenseController.userAppId] para NO confundir el `user_app_id`
+  /// con el `app_id` global del producto.
   String? _currentUserAppId() {
-    final value = _license?.claims?.payload['app_id']?.toString();
+    final value = _license?.userAppId;
     return (value == null || value.isEmpty) ? null : value;
   }
 
