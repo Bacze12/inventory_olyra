@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/audio/sound_feedback.dart';
 import '../../core/utils/formatters.dart';
+import '../../l10n/app_localizations.dart';
 import '../../data/models/product.dart';
 import '../../data/models/sale.dart';
 import '../../data/repositories/movement_repository.dart';
@@ -369,16 +370,16 @@ class _PosDesktopViewState extends State<PosDesktopView>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Vaciar venta'),
-        content: const Text('¿Vaciar la venta actual? Los ítems se descartan.'),
+        title: Text(AppLocalizations.of(ctx).posClearSaleTitle),
+        content: Text(AppLocalizations.of(ctx).posClearSalePrompt),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(AppLocalizations.of(ctx).commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Vaciar'),
+            child: Text(AppLocalizations.of(ctx).commonClear),
           ),
         ],
       ),
@@ -430,10 +431,10 @@ class _PosDesktopViewState extends State<PosDesktopView>
                 ? null
                 : AppBar(
                     automaticallyImplyLeading: false,
-                    title: const Text('Punto de venta'),
+                    title: Text(AppLocalizations.of(context).posTitle),
                     actions: [
                       Tooltip(
-                        message: 'Cerrar caja',
+                        message: AppLocalizations.of(context).posCloseShift,
                         child: TextButton.icon(
                           onPressed: _closeShiftDialog,
                           icon: const Icon(Icons.lock, size: 18),
@@ -454,14 +455,16 @@ class _PosDesktopViewState extends State<PosDesktopView>
                           );
                         },
                         icon: const Icon(Icons.receipt_long_outlined),
-                        label: const Text('Ver Ventas'),
+                        label: Text(
+                          AppLocalizations.of(context).posViewSales,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Flexible(
                         child: Center(
                           child: Text(
                             cart.isEmpty
-                                ? 'Sin venta activa'
+                                ? AppLocalizations.of(context).posNoActiveSale
                                 : '${cart.totalUnits} ítem(s) · ${formatMoney(cart.total)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -471,7 +474,7 @@ class _PosDesktopViewState extends State<PosDesktopView>
                       ),
                       const SizedBox(width: 12),
                       IconButton(
-                        tooltip: 'Salir al menú',
+                        tooltip: AppLocalizations.of(context).posExitMenu,
                         icon: const Icon(Icons.arrow_back),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
@@ -582,7 +585,7 @@ class _PosDesktopViewState extends State<PosDesktopView>
                 ? null
                 : IconButton(
                     icon: const Icon(Icons.close),
-                    tooltip: 'Limpiar búsqueda',
+                    tooltip: AppLocalizations.of(context).posClearSearch,
                     onPressed: _clearSearch,
                   ),
           ),
@@ -983,7 +986,7 @@ class _TicketItemTile extends StatelessWidget {
                   children: [
                     Expanded(child: info),
                     _SmallIconButton(
-                      tooltip: 'Quitar de la venta',
+                      tooltip: AppLocalizations.of(context).posRemoveItem,
                       icon: Icons.delete_outline,
                       color: scheme.error,
                       onPressed: onRemove,
@@ -1014,7 +1017,7 @@ class _TicketItemTile extends StatelessWidget {
             children: [
               Expanded(child: info),
               _SmallIconButton(
-                tooltip: 'Quitar de la venta',
+                tooltip: AppLocalizations.of(context).posRemoveItem,
                 icon: Icons.delete_outline,
                 color: scheme.error,
                 onPressed: onRemove,
@@ -1329,9 +1332,10 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final cart = widget.cart;
+    final l10n = AppLocalizations.of(context);
 
     return AlertDialog(
-      title: const Text('Finalizar venta'),
+      title: Text(l10n.posCheckoutTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440, maxHeight: 520),
         child: Column(
@@ -1407,16 +1411,16 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
             ),
             const SizedBox(height: 16),
             SegmentedButton<PaymentMethod>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: PaymentMethod.efectivo,
-                  icon: Icon(Icons.payments_outlined),
-                  label: Text('Efectivo'),
+                  icon: const Icon(Icons.payments_outlined),
+                  label: Text(l10n.commonEfectivo),
                 ),
                 ButtonSegment(
                   value: PaymentMethod.tarjeta,
-                  icon: Icon(Icons.credit_card),
-                  label: Text('Tarjeta'),
+                  icon: const Icon(Icons.credit_card),
+                  label: Text(l10n.commonTarjeta),
                 ),
               ],
               selected: {_method},
@@ -1457,11 +1461,11 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _insufficient ? null : _confirm,
-          child: const Text('Confirmar venta'),
+          child: Text(l10n.posConfirmSale),
         ),
       ],
     );

@@ -19,6 +19,7 @@ import 'package:scanflow/features/license/license_service.dart';
 import 'package:scanflow/features/products/product_provider.dart';
 import 'package:scanflow/features/sales/sales_provider.dart';
 import 'package:scanflow/features/shifts/shift_provider.dart';
+import 'package:scanflow/l10n/app_localizations.dart';
 import 'package:scanflow/services/hardware_id_service.dart';
 import 'package:scanflow/views/pos/cart_provider.dart';
 import 'package:scanflow/views/pos/pos_desktop_view.dart';
@@ -102,7 +103,12 @@ Widget _buildApp() {
         )..start(),
       ),
     ],
-    child: const MaterialApp(home: PosDesktopView()),
+    child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: [Locale('es'), Locale('en')],
+      locale: Locale('es'),
+      home: PosDesktopView(),
+    ),
   );
 }
 

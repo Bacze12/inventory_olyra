@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:pdf/pdf.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -39,6 +39,12 @@ class ReportProvider extends ChangeNotifier {
 
   int get totalUnits =>
       _snapshot.fold(0, (sum, product) => sum + product.quantity);
+
+  /// Nombre de archivo con marca de tiempo: Reporte_ScanFlow_yyyyMMdd_HHmmss.pdf
+  String reportFileName({String extension = 'pdf'}) {
+    final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    return 'Reporte_ScanFlow_$stamp.$extension';
+  }
 
   Future<void> init() async {
     try {
@@ -94,17 +100,34 @@ class ReportProvider extends ChangeNotifier {
 
   Future<String?> saveToDevice(Uint8List bytes) async {
     try {
-      final documents = await path_provider.getApplicationDocumentsDirectory();
-      final folder = Directory(p.join(documents.path, AppConstants.reportsFolderName));
+      final base = await _baseDirectory();
+      final folder = Directory(p.join(base.path, AppConstants.reportsFolderName));
       await folder.create(recursive: true);
-      final file = File(
-        p.join(folder.path, '${AppConstants.pdfFilePrefix}${fileStamp()}.pdf'),
-      );
+      final file = File(p.join(folder.path, reportFileName()));
       await file.writeAsBytes(bytes, flush: true);
       return file.path;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Carpeta de respaldo:
+  /// - Android/iOS: almacenamiento externo propio de la app (sin permisos),
+  ///   con respaldo en documentos si no está disponible.
+  /// - Desktop: carpeta "Descargas" del usuario; si falla, documentos.
+  Future<Directory> _baseDirectory() async {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        final external = await path_provider.getExternalStorageDirectory();
+        if (external != null) return external;
+      } catch (_) {}
+      return path_provider.getApplicationDocumentsDirectory();
+    }
+    try {
+      final downloads = await path_provider.getDownloadsDirectory();
+      if (downloads != null) return downloads;
+    } catch (_) {}
+    return path_provider.getApplicationDocumentsDirectory();
   }
 
   Future<void> reload() async {

@@ -134,34 +134,33 @@ class UpdateService {
   }
 }
 
-  static void _showUpdateDialog(
-    BuildContext context,
-    String apkUrl,
-    String version,
-  ) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text('Actualización v$version disponible'),
-        content: const Text(
-          'Hay una nueva versión de BodegaFlow. ¿Deseas descargarla e instalarla ahora?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Más tarde'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _downloadAndInstallApk(apkUrl);
-            },
-            child: const Text('Actualizar'),
-          ),
-        ],
-      ),
-    );
+/// Diálogo de descarga/instalación de la actualización OTA (Android).
+class _UpdateDownloadDialog extends StatefulWidget {
+  const _UpdateDownloadDialog({required this.url});
+
+  final String url;
+
+  @override
+  State<_UpdateDownloadDialog> createState() => _UpdateDownloadDialogState();
+}
+
+class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
+  StreamSubscription<OtaEvent>? _sub;
+
+  String _message = 'Descargando…';
+  int? _percent;
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
   }
 
   Future<void> _start() async {

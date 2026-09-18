@@ -10,6 +10,7 @@ import 'package:scanflow/data/repositories/movement_repository.dart';
 import 'package:scanflow/data/repositories/product_repository.dart';
 import 'package:scanflow/data/repositories/sales_repository.dart';
 import 'package:scanflow/features/sales/sales_provider.dart';
+import 'package:scanflow/l10n/app_localizations.dart';
 import 'package:scanflow/views/sales/sales_history_view.dart';
 
 /// path_provider no se registra en pruebas: en lugar de colgar la apertura de
@@ -37,6 +38,9 @@ Widget _buildApp(Size size) {
       productRepository: ProductRepository(AppDatabase.instance),
     ),
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('es'), Locale('en')],
+      locale: const Locale('es'),
       home: Scaffold(
         body: SizedBox.expand(
           child: SalesHistoryView(),

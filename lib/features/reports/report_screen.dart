@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../l10n/app_localizations.dart';
 import 'report_provider.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -59,7 +63,11 @@ class _ReportScreenState extends State<ReportScreen> {
       setState(() => _bytes = bytes);
     } catch (_) {
       messenger.showSnackBar(
-        SnackBar(content: Text(provider.error ?? 'No se pudo generar el reporte')),
+        SnackBar(
+          content: Text(
+            provider.error ?? AppLocalizations.of(context).reportsErrorGenerate,
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -70,13 +78,14 @@ class _ReportScreenState extends State<ReportScreen> {
     final bytes = _bytes;
     if (bytes == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    final path = await context.read<ReportProvider>().saveToDevice(bytes);
+    final provider = context.read<ReportProvider>();
+    final l10n = AppLocalizations.of(context);
+    final path = await provider.saveToDevice(bytes);
+    if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          path == null
-              ? 'No se pudo guardar el reporte'
-              : 'Guardado en:\n$path',
+          path == null ? l10n.reportsErrorSave : l10n.reportsSavedAt(path),
         ),
       ),
     );
@@ -85,14 +94,46 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _share() async {
     final bytes = _bytes;
     if (bytes == null) return;
-    await Printing.sharePdf(bytes: bytes, filename: 'inventario.pdf');
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<ReportProvider>();
+    final l10n = AppLocalizations.of(context);
+
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      // Android/iOS: guarda en almacenamiento de la app y abre la hoja de
+      // compartir nativa con un content URI (share_plus → FileProvider).
+      final path = await provider.saveToDevice(bytes);
+      if (!mounted) return;
+      if (path == null) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.reportsErrorSave)),
+        );
+        return;
+      }
+      try {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(path, mimeType: 'application/pdf')],
+          ),
+        );
+      } catch (_) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.reportsErrorShare)),
+        );
+      }
+    } else {
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: provider.reportFileName(),
+      );
+    }
   }
 
   Future<void> _print() async {
     final provider = context.read<ReportProvider>();
     await Printing.layoutPdf(
       onLayout: (format) async => provider.buildForFormat(format),
-      name: 'inventario.pdf',
+      name: provider.reportFileName(),
     );
   }
 
@@ -100,9 +141,10 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<ReportProvider>();
     final hasReport = _bytes != null;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Reporte de inventario')),
+      appBar: AppBar(title: Text(l10n.reportsTitle)),
       body: Column(
         children: [
           Padding(
@@ -111,10 +153,10 @@ class _ReportScreenState extends State<ReportScreen> {
               controller: _storeController,
               onChanged: _onStoreNameChanged,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Nombre del negocio',
+              decoration: InputDecoration(
+                labelText: l10n.reportsStoreName,
                 hintText: AppConstants.defaultStoreName,
-                prefixIcon: Icon(Icons.storefront_outlined),
+                prefixIcon: const Icon(Icons.storefront_outlined),
               ),
             ),
           ),
@@ -128,7 +170,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   : FilledButton.icon(
                       onPressed: _generate,
                       icon: const Icon(Icons.download_done_outlined),
-                      label: const Text('Generar reporte PDF'),
+                      label: Text(l10n.reportsGenerate),
                     ),
             ),
           ),
@@ -141,7 +183,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _save,
                       icon: const Icon(Icons.save_alt),
-                      label: const Text('Guardar'),
+                      label: Text(l10n.reportsSave),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -149,7 +191,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _share,
                       icon: const Icon(Icons.share_outlined),
-                      label: const Text('Compartir'),
+                      label: Text(l10n.reportsShare),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -157,7 +199,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     child: FilledButton.icon(
                       onPressed: _print,
                       icon: const Icon(Icons.print_outlined),
-                      label: const Text('Imprimir'),
+                      label: Text(l10n.reportsPrint),
                     ),
                   ),
                 ],
@@ -223,11 +265,15 @@ class _StatsRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          stat('${provider.snapshot.length}', 'Productos'),
+          stat('${provider.snapshot.length}', AppLocalizations.of(context).reportsProducts),
           const SizedBox(width: 8),
-          stat('${provider.totalUnits}', 'Unidades'),
+          stat('${provider.totalUnits}', AppLocalizations.of(context).reportsUnits),
           const SizedBox(width: 8),
-          stat('$low', 'Stock bajo', color: low > 0 ? scheme.error : null),
+          stat(
+            '$low',
+            AppLocalizations.of(context).reportsLowStock,
+            color: low > 0 ? scheme.error : null,
+          ),
         ],
       ),
     );
@@ -249,7 +295,7 @@ class _NoReportHint extends StatelessWidget {
             Icon(Icons.picture_as_pdf_outlined, size: 72, color: scheme.outline),
             const SizedBox(height: 12),
             Text(
-              'Genera el reporte para verlo en pantalla.',
+              AppLocalizations.of(context).reportsHint,
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),

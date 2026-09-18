@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../features/shifts/shift_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Ticket Z: el comprobante/cuadre que se muestra al cerrar la caja.
 class TicketZDialog extends StatelessWidget {
@@ -18,9 +19,10 @@ class TicketZDialog extends StatelessWidget {
     final difference = result.difference;
     final matches = (difference.abs() < 0.009);
     final diffColor = matches ? Colors.green.shade700 : scheme.error;
+    final l10n = AppLocalizations.of(context);
 
     return AlertDialog(
-      title: const Text('Ticket Z · Cierre de caja'),
+      title: Text(l10n.shiftsTicketTitle),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -28,22 +30,22 @@ class TicketZDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _row('Caja', shifts.registerName),
-              _row('Fecha', _dateTime(result.closedAt ?? shift.closedAt)),
+              _row(l10n.shiftsRegister, shifts.registerName),
+              _row(l10n.shiftsDate, _dateTime(result.closedAt ?? shift.closedAt)),
               const Divider(height: 24),
-              _amount('Fondo inicial', shift.openingAmount),
-              _row('Efectivo ventas', formatMoney(result.totals.cashTotal)),
-              _row('Tarjeta ventas', formatMoney(result.totals.cardTotal)),
-              _amount('Total ventas', result.totals.total),
+              _amount(l10n.shiftsOpeningFund, shift.openingAmount),
+              _row(l10n.shiftsCashSales, formatMoney(result.totals.cashTotal)),
+              _row(l10n.shiftsCardSales, formatMoney(result.totals.cardTotal)),
+              _amount(l10n.shiftsTotalSales, result.totals.total),
               const Divider(height: 24),
-              _amount('Efectivo esperado', result.expected),
-              _amount('Efectivo contado', result.counted),
+              _amount(l10n.shiftsExpectedCash, result.expected),
+              _amount(l10n.shiftsCountedLabel, result.counted),
               const Divider(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Diferencia',
+                    l10n.shiftsDifference,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   Text(
@@ -59,10 +61,10 @@ class TicketZDialog extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 matches
-                    ? 'El cuadre coincide. Caja cerrada.'
+                    ? l10n.shiftsRegMatch
                     : difference > 0
-                        ? 'Sobra efectivo en caja.'
-                        : 'Falta efectivo en caja.',
+                        ? l10n.shiftsRegOver
+                        : l10n.shiftsRegShort,
                 style: TextStyle(color: diffColor),
               ),
             ],
@@ -72,7 +74,7 @@ class TicketZDialog extends StatelessWidget {
       actions: [
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Listo'),
+          child: Text(l10n.commonDone),
         ),
       ],
     );

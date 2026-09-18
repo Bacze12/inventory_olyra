@@ -8,18 +8,20 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/utils/formatters.dart';
+import '../../l10n/app_localizations.dart';
 import '../../data/models/product.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../data/services/pairing_service.dart';
 import '../../data/services/sync_service.dart';
 import '../../services/global_scanner_redirect.dart';
 import '../../services/scanner_input_service.dart';
+import '../../services/windows_update_service.dart';
 import '../../views/pairing/desktop_pairing_view.dart';
 import '../../views/pairing/mobile_scan_pairing_view.dart';
+import '../../views/pos/pos_desktop_view.dart';
+import '../../views/sales/sales_history_view.dart';
 import '../activation/license_about_dialog.dart';
 import '../activation/license_status_banner.dart';
 import '../products/product_form_screen.dart';
@@ -28,6 +30,8 @@ import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
+import '../sync/cloud_sync_panel.dart';
+import '../sync/olyra_cloud_sync.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -203,17 +207,20 @@ class _HomeScreenState extends State<HomeScreen> {
     context.read<ProductProvider>().load();
   }
 
+  bool _isDesktop() =>
+      kIsWeb ? false : (Platform.isWindows || Platform.isLinux);
+
   @override
   Widget build(BuildContext context) {
     final productProvider = context.watch<ProductProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppConstants.appName),
+        title: Text(AppLocalizations.of(context).appTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
-            tooltip: 'Acerca de · Licencia',
+            tooltip: AppLocalizations.of(context).menuAboutTooltip,
             onPressed: () => showLicenseAboutDialog(
               context,
               onSearchUpdates: _searchUpdates,
@@ -245,15 +252,15 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           _MenuTile(
             icon: Icons.point_of_sale,
-            title: 'Punto de venta',
-            subtitle: 'Venta rápida en PC · F12 para cobrar',
+            title: AppLocalizations.of(context).posMenuTitle,
+            subtitle: AppLocalizations.of(context).posMenuSub,
             onTap: () => _push(context, const PosDesktopView()),
           ),
           const SizedBox(height: 12),
           _MenuTile(
             icon: Icons.receipt_long_outlined,
-            title: 'Historial de ventas',
-            subtitle: 'Ventas del POS · detalle y anulación',
+            title: AppLocalizations.of(context).salesHistoryMenuTitle,
+            subtitle: AppLocalizations.of(context).salesHistoryMenuSub,
             onTap: () => _push(context, const SalesHistoryView()),
           ),
           const SizedBox(height: 12),
@@ -262,8 +269,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.inventory_2_outlined,
-                  title: 'Productos',
-                  subtitle: 'Catálogo y stock',
+                  title: AppLocalizations.of(context).menuProducts,
+                  subtitle: AppLocalizations.of(context).menuProductsSub,
                   onTap: () => _push(context, const ProductListScreen()),
                 ),
               ),
@@ -271,8 +278,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.picture_as_pdf_outlined,
-                  title: 'Reporte PDF',
-                  subtitle: 'Exportar y guardar',
+                  title: AppLocalizations.of(context).menuReports,
+                  subtitle: AppLocalizations.of(context).menuReportsSub,
                   onTap: () => _push(context, const ReportScreen()),
                 ),
               ),
@@ -284,8 +291,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.print_outlined,
-                  title: 'Imprimir etiqueta',
-                  subtitle: 'Bluetooth / PDF',
+                  title: AppLocalizations.of(context).menuPrinter,
+                  subtitle: AppLocalizations.of(context).menuPrinterSub,
                   onTap: () => _push(context, const PrinterScreen()),
                 ),
               ),
@@ -293,10 +300,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.qr_code_scanner,
-                  title: 'Escáner',
+                  title: AppLocalizations.of(context).menuScanner,
                   subtitle: _isDesktop()
-                      ? 'Pistola en cualquier pantalla'
-                      : 'Entradas y salidas',
+                      ? AppLocalizations.of(context).menuScannerSubHandheld
+                      : AppLocalizations.of(context).menuScannerSubMobile,
                   onTap: () => _push(
                     context,
                     _isDesktop()
@@ -312,8 +319,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (AppConfig.enableMobileSync)
             _MenuTile(
               icon: Icons.devices,
-              title: 'Vincular dispositivo',
-              subtitle: 'Emparejar esta PC con un celular (QR / PIN)',
+              title: AppLocalizations.of(context).menuPair,
+              subtitle: AppLocalizations.of(context).menuPairSub,
               onTap: () => _push(
                 context,
                 _isDesktop()
@@ -325,8 +332,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
             _MenuTile(
               icon: Icons.wifi_tethering,
-              title: 'Sincronizar con PC',
-              subtitle: 'Bajar catálogo y subir ventas (Wi-Fi)',
+              title: AppLocalizations.of(context).menuSyncTitle,
+              subtitle: AppLocalizations.of(context).menuSyncSub,
               onTap: () => _syncNow(context),
             ),
             const SizedBox(height: 8),
@@ -335,7 +342,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: TextButton.icon(
                 onPressed: () => _runDiagnostics(context),
                 icon: const Icon(Icons.healing, size: 18),
-                label: const Text('Probar conexión (diagnóstico)'),
+                label:
+                    Text(AppLocalizations.of(context).menuDiagnose),
               ),
             ),
           ],
@@ -367,7 +375,7 @@ class _HeroSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventario al instante',
+            AppLocalizations.of(context).homeHeroTitle,
             style: TextStyle(
               color: scheme.onPrimary,
               fontSize: 20,
@@ -376,7 +384,7 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Escanea y actualiza existencias sin conexión.',
+            AppLocalizations.of(context).homeHeroSub,
             style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.85)),
           ),
           const SizedBox(height: 16),
@@ -387,7 +395,7 @@ class _HeroSection extends StatelessWidget {
               foregroundColor: scheme.primary,
             ),
             icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Escanear ahora'),
+            label: Text(AppLocalizations.of(context).homeHeroScan),
           ),
         ],
       ),
@@ -464,19 +472,21 @@ class _CloudSyncTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cloud = context.watch<OlyraCloudSync>();
 
+    final l10n = AppLocalizations.of(context);
+
     final String subtitle = switch (cloud.state) {
       OlyraCloudState.needsActivation =>
-        'Licencia no activa: activa antes de sincronizar',
-      OlyraCloudState.validating => 'Validando con olyra.cl…',
-      OlyraCloudState.syncing => 'Sincronizando…',
-      OlyraCloudState.error => 'Error de sincronización · reintenta',
-      OlyraCloudState.active => 'Nube Activa · Sincronizado',
-      OlyraCloudState.unconfigured => 'Nube lista · revalida para conectar',
+        l10n.cloudNeedsActivation,
+      OlyraCloudState.validating => l10n.cloudValidating,
+      OlyraCloudState.syncing => l10n.cloudSyncing,
+      OlyraCloudState.error => l10n.cloudError,
+      OlyraCloudState.active => l10n.cloudActive,
+      OlyraCloudState.unconfigured => l10n.cloudUnconfigured,
     };
 
     return _MenuTile(
       icon: Icons.cloud_sync_outlined,
-      title: 'Nube y respaldo',
+      title: l10n.menuCloudTitle,
       subtitle: subtitle,
       onTap: () => showCloudSyncPanel(context),
     );

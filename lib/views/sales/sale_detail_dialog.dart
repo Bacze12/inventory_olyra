@@ -5,6 +5,7 @@ import '../../core/utils/formatters.dart';
 import '../../data/models/sale.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../features/sales/sales_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Abre el diálogo con el detalle del ticket de una venta.
 ///
@@ -32,7 +33,7 @@ class _SaleDetailDialog extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return AlertDialog(
-            title: const Text('Detalle de venta'),
+            title: Text(AppLocalizations.of(context).saleDetailTitle),
             content: const Text('No se pudo cargar el detalle de la venta.'),
             actions: [
               TextButton(
@@ -43,9 +44,9 @@ class _SaleDetailDialog extends StatelessWidget {
           );
         }
         if (!snapshot.hasData) {
-          return const AlertDialog(
-            title: Text('Detalle de venta'),
-            content: SizedBox(
+          return AlertDialog(
+            title: Text(AppLocalizations.of(context).saleDetailTitle),
+            content: const SizedBox(
               height: 120,
               child: Center(child: CircularProgressIndicator()),
             ),
@@ -69,7 +70,7 @@ class _SaleDetailContent extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Anular venta'),
+        title: Text(AppLocalizations.of(ctx).saleVoidTitle),
         content: Text(
           'Se devolverá el stock de ${sale.items.map((i) => i.productName).toList().join(', ')} '
           'al inventario. ¿Continuar?',
@@ -77,7 +78,7 @@ class _SaleDetailContent extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(AppLocalizations.of(ctx).commonCancel),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(ctx).pop(true),

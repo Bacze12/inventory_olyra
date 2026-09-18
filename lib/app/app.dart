@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_constants.dart';
+import '../l10n/app_localizations.dart';
 import '../core/config/olyra_config.dart';
 import '../data/cloud/supabase_gateway.dart';
 import '../data/database/app_database.dart';
@@ -183,6 +184,12 @@ class InventarioApp extends StatelessWidget {
       child: MaterialApp(
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,
+        // Localización (es por defecto, en disponible). El orden del primer
+        // Locale fija el idioma de respaldo cuando el del sistema no está
+        // soportado: Español. El generador (generate: true) crea
+        // AppLocalizations desde lib/l10n/*.arb.
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('es'), Locale('en')],
         theme: AppTheme.light(),
         home: const StartupGate(),
       ),

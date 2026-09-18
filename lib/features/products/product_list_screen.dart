@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/product.dart';
+import '../../l10n/app_localizations.dart';
 import '../printer/mass_label_screen.dart';
 import 'product_form_screen.dart';
 import 'product_provider.dart';
@@ -36,7 +37,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     final provider = context.watch<ProductProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Productos'),
+        title: Text(AppLocalizations.of(context).productListTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.label_outline),
@@ -167,14 +168,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar producto'),
+        title: Text(AppLocalizations.of(dialogContext).productDeleteTitle),
         content: Text(
           '¿Eliminar "${product.name}" y su historial de movimientos?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
+            child: Text(AppLocalizations.of(dialogContext).commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),

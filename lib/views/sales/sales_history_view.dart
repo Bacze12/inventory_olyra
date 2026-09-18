@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/sale.dart';
 import '../../features/sales/sales_provider.dart';
+import '../../l10n/app_localizations.dart';
 import 'sale_detail_dialog.dart';
 
 /// Historial de ventas registradas por el POS.
@@ -53,7 +54,7 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Historial de ventas')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).salesHistoryTitle)),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -91,7 +92,7 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.close),
-                        tooltip: 'Limpiar búsqueda',
+                        tooltip: AppLocalizations.of(context).posClearSearch,
                         onPressed: _clearSearch,
                       ),
                 border: const OutlineInputBorder(),

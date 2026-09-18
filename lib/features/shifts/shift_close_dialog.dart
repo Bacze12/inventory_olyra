@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/pos_shift.dart';
 import '../../data/repositories/shift_repository.dart';
+import '../../l10n/app_localizations.dart';
 import 'shift_provider.dart';
 
 /// Diálogo de cierre de caja: pide el PIN del cajero del turno y el efectivo
@@ -128,9 +129,10 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
     final shifts = context.watch<ShiftProvider>();
     final shift = shifts.activeShift;
     final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return AlertDialog(
-      title: const Text('Cerrar caja · Ticket Z'),
+      title: Text(l10n.shiftsCloseTitle),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -139,13 +141,13 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (shift != null) ...[
-                _row('Caja', shifts.registerName),
-                _row('Cajero', _cashierName(shift)),
+                _row(l10n.shiftsRegister, shifts.registerName),
+                _row(l10n.shiftsCashier, _cashierName(shift)),
                 _row(
-                  'Abierto',
+                  l10n.shiftsOpenedAt,
                   _formatDateTime(shift.openedAt),
                 ),
-                _row('Fondo inicial', formatMoney(shift.openingAmount)),
+                _row(l10n.shiftsOpeningFund, formatMoney(shift.openingAmount)),
               ],
               const SizedBox(height: 16),
               TextField(
@@ -155,16 +157,16 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
                 maxLength: 4,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'PIN del cajero',
+                decoration: InputDecoration(
+                  labelText: l10n.shiftsPin,
                   counterText: '',
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
               _row(
-                'Efectivo esperado',
-                _expectedLoaded ? formatMoney(_expectedCash) : 'calculando…',
+                l10n.shiftsExpectedCash,
+                _expectedLoaded ? formatMoney(_expectedCash) : l10n.shiftsExpectedPlaceholder,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -172,11 +174,11 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
                 enabled: !_working,
                 onChanged: _onCountedChanged,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Efectivo contado en caja',
+                decoration: InputDecoration(
+                  labelText: l10n.shiftsCountedCash,
                   prefixText: r'$ ',
                   border: OutlineInputBorder(),
-                  helperText: 'Se precarga el saldo esperado para que cuadre.',
+                  helperText: l10n.shiftsCountedHelper,
                 ),
               ),
               const SizedBox(height: 8),
@@ -185,7 +187,7 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
                 child: TextButton.icon(
                   onPressed: _working ? null : _useExpected,
                   icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text('Usar saldo esperado'),
+                  label: Text(l10n.shiftsUseExpected),
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                   ),
@@ -204,7 +206,7 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
       actions: [
         TextButton(
           onPressed: _working ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton.icon(
           onPressed: _working ? null : _submit,
@@ -215,7 +217,7 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.lock),
-          label: const Text('Cerrar caja'),
+          label: Text(l10n.shiftsCloseAction),
         ),
       ],
     );
@@ -236,8 +238,8 @@ class _ShiftCloseDialogState extends State<ShiftCloseDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Diferencia',
-              style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(AppLocalizations.of(context).shiftsDifference,
+              style: const TextStyle(fontWeight: FontWeight.w700)),
           Text(
             formatMoney(diferencia),
             style: TextStyle(

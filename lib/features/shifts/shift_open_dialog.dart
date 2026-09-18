@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/app_localizations.dart';
 import 'shift_provider.dart';
 
 /// Diálogo de apertura de turno: elige/crea la caja, el cajero, su PIN y el
@@ -134,7 +135,7 @@ class _ShiftOpenDialogState extends State<ShiftOpenDialog> {
     final scheme = Theme.of(context).colorScheme;
 
     return AlertDialog(
-      title: const Text('Abrir turno de caja'),
+      title: Text(AppLocalizations.of(context).shiftsOpenTitle),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(

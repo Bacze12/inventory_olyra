@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
+import '../../l10n/app_localizations.dart';
 import '../products/product_form_screen.dart';
 import 'scanner_provider.dart';
 
@@ -239,7 +240,7 @@ class _OperationSelector extends StatelessWidget {
       children: [
         Expanded(
           child: _OperationButton(
-            label: 'Entrada',
+            label: AppLocalizations.of(context).scannerEntrada,
             operator: '+1',
             icon: Icons.add_circle_outline,
             selected: provider.operation == ScanOperation.entrada,
@@ -250,7 +251,7 @@ class _OperationSelector extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _OperationButton(
-            label: 'Salida',
+            label: AppLocalizations.of(context).scannerSalida,
             operator: '-1',
             icon: Icons.remove_circle_outline,
             selected: provider.operation == ScanOperation.salida,
