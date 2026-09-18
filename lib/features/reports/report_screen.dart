@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/formatters.dart';
 import 'report_provider.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -85,14 +86,17 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _share() async {
     final bytes = _bytes;
     if (bytes == null) return;
-    await Printing.sharePdf(bytes: bytes, filename: 'inventario.pdf');
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: '${AppConstants.pdfFilePrefix}${fileStamp()}.pdf',
+    );
   }
 
   Future<void> _print() async {
     final provider = context.read<ReportProvider>();
     await Printing.layoutPdf(
       onLayout: (format) async => provider.buildForFormat(format),
-      name: 'inventario.pdf',
+      name: '${AppConstants.pdfFilePrefix}${fileStamp()}.pdf',
     );
   }
 

@@ -56,3 +56,5 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icon/bodegaflow_icon.png

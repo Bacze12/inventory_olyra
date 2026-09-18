@@ -10,6 +10,7 @@ import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
 import '../features/scanner/scanner_provider.dart';
+import '../features/splash/animated_splash.dart';
 import 'theme/app_theme.dart';
 
 class InventarioApp extends StatelessWidget {
@@ -49,7 +50,28 @@ class InventarioApp extends StatelessWidget {
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        home: const HomeScreen(),
+        home: AnimatedAppSplash(
+          logo: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Image.asset(
+              'assets/icon/bodegaflow_icon.png',
+              width: 96,
+              height: 96,
+            ),
+          ),
+          child: const HomeScreen(),
+        ),
       ),
     );
   }
