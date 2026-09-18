@@ -24,6 +24,7 @@ import '../features/reports/report_provider.dart';
 import '../features/sales/sales_provider.dart';
 import '../features/scanner/scanner_provider.dart';
 import '../features/shifts/shift_provider.dart';
+import '../features/splash/animated_splash.dart';
 import '../features/sync/backup_service.dart';
 import '../features/sync/cloud_sync_manager.dart';
 import '../features/sync/olyra_cloud_sync.dart';
@@ -184,7 +185,28 @@ class InventarioApp extends StatelessWidget {
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        home: const StartupGate(),
+        home: AnimatedAppSplash(
+          logo: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Image.asset(
+              'assets/icon/bodegaflow_icon.png',
+              width: 96,
+              height: 96,
+            ),
+          ),
+          child: const StartupGate(),
+        ),
       ),
     );
   }

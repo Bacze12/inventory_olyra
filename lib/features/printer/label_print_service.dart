@@ -15,50 +15,65 @@ class LabelPrintService {
     marginAll: 2 * PdfPageFormat.mm,
   );
 
-  Future<Uint8List> buildLabelPdf(Product product) async {
+  Future<Uint8List> buildLabelPdf(Product product) {
     final doc = pw.Document();
     doc.addPage(
-      pw.Page(
-        pageFormat: labelFormat,
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+      pw.Page(pageFormat: labelFormat, build: (context) => _buildLabel(product)),
+    );
+    return doc.save();
+  }
+
+  /// Genera un PDF con una página de etiqueta por cada producto indicado.
+  Future<Uint8List> buildLabelsPdf(List<Product> products) {
+    final doc = pw.Document();
+    for (final product in products) {
+      doc.addPage(
+        pw.Page(
+          pageFormat: labelFormat,
+          build: (context) => _buildLabel(product),
+        ),
+      );
+    }
+    return doc.save();
+  }
+
+  pw.Widget _buildLabel(Product product) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          product.name,
+          maxLines: 2,
+          overflow: pw.TextOverflow.clip,
+          style: const pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        pw.BarcodeWidget(
+          barcode: pw.Barcode.code128(),
+          data: product.barcode,
+          width: 52 * PdfPageFormat.mm,
+          height: 18 * PdfPageFormat.mm,
+          drawText: true,
+        ),
+        pw.SizedBox(height: 4),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              product.name,
-              maxLines: 2,
-              overflow: pw.TextOverflow.clip,
-              style: const pw.TextStyle(
-                fontSize: 11,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              'Cantidad: ${product.quantity}',
+              style: const pw.TextStyle(fontSize: 9),
             ),
-            pw.SizedBox(height: 4),
-            pw.BarcodeWidget(
-              barcode: pw.Barcode.code128(),
-              data: product.barcode,
-              width: 52 * PdfPageFormat.mm,
-              height: 18 * PdfPageFormat.mm,
-              drawText: true,
-            ),
-            pw.SizedBox(height: 4),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  'Cantidad: ${product.quantity}',
-                  style: const pw.TextStyle(fontSize: 9),
-                ),
-                pw.Text(
-                  'Mín: ${product.minStock}',
-                  style: const pw.TextStyle(fontSize: 9),
-                ),
-              ],
+            pw.Text(
+              'Mín: ${product.minStock}',
+              style: const pw.TextStyle(fontSize: 9),
             ),
           ],
         ),
-      ),
+      ],
     );
-    return doc.save();
   }
 
   Future<void> printLabel(Product product) async {
