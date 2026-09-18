@@ -13,13 +13,15 @@ import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/sales_repository.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../data/services/pairing_service.dart';
 import '../../data/services/sync_service.dart';
 import '../../services/global_scanner_redirect.dart';
 import '../../services/scanner_input_service.dart';
+import '../../services/windows_update_service.dart';
 import '../../views/pairing/desktop_pairing_view.dart';
 import '../../views/pairing/mobile_scan_pairing_view.dart';
+import '../../views/pos/pos_desktop_view.dart';
+import '../../views/sales/sales_history_view.dart';
 import '../activation/license_about_dialog.dart';
 import '../activation/license_status_banner.dart';
 import '../products/product_form_screen.dart';
@@ -28,6 +30,8 @@ import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
+import '../sync/cloud_sync_panel.dart';
+import '../sync/olyra_cloud_sync.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,6 +41,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool _isDesktop() =>
+      kIsWeb ? false : (Platform.isWindows || Platform.isLinux);
   @override
   void initState() {
     super.initState();
