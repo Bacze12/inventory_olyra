@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/i18n/app_strings.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
+import '../settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,21 +37,37 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final productProvider = context.watch<ProductProvider>();
+    final languageCode = Localizations.localeOf(context).languageCode;
+    String tr(String key) => AppStrings.translate(languageCode, key);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppConstants.appName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: tr(AppStrings.homeSettings),
+            onPressed: () => _push(context, const SettingsScreen()),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _HeroSection(
+            title: tr(AppStrings.homeHeroTitle),
+            subtitle: tr(AppStrings.homeHeroSubtitle),
+            scanLabel: tr(AppStrings.homeScanNow),
             onScan: () => _push(context, const ScannerScreen()),
           ),
           const SizedBox(height: 12),
           if (productProvider.lowStockCount > 0) ...[
             _LowStockBanner(
-              count: productProvider.lowStockCount,
+              message: AppStrings.interpolate(
+                languageCode,
+                AppStrings.homeLowStock,
+                args: {'count': productProvider.lowStockCount},
+              ),
               onTap: () => _push(context, const ProductListScreen()),
             ),
             const SizedBox(height: 12),
@@ -59,8 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.inventory_2_outlined,
-                  title: 'Productos',
-                  subtitle: 'Catálogo y stock',
+                  title: tr(AppStrings.homeProducts),
+                  subtitle: tr(AppStrings.homeProductsSubtitle),
                   onTap: () => _push(context, const ProductListScreen()),
                 ),
               ),
@@ -68,8 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.picture_as_pdf_outlined,
-                  title: 'Reporte PDF',
-                  subtitle: 'Exportar y guardar',
+                  title: tr(AppStrings.homeReport),
+                  subtitle: tr(AppStrings.homeReportSubtitle),
                   onTap: () => _push(context, const ReportScreen()),
                 ),
               ),
@@ -81,8 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.print_outlined,
-                  title: 'Imprimir etiqueta',
-                  subtitle: 'Bluetooth / PDF',
+                  title: tr(AppStrings.homeLabel),
+                  subtitle: tr(AppStrings.homeLabelSubtitle),
                   onTap: () => _push(context, const PrinterScreen()),
                 ),
               ),
@@ -90,8 +108,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: _MenuTile(
                   icon: Icons.qr_code_scanner,
-                  title: 'Escáner',
-                  subtitle: 'Entradas y salidas',
+                  title: tr(AppStrings.homeScanner),
+                  subtitle: tr(AppStrings.homeScannerSubtitle),
                   onTap: () => _push(context, const ScannerScreen()),
                 ),
               ),
@@ -104,8 +122,16 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.onScan});
+  const _HeroSection({
+    required this.title,
+    required this.subtitle,
+    required this.scanLabel,
+    required this.onScan,
+  });
 
+  final String title;
+  final String subtitle;
+  final String scanLabel;
   final VoidCallback onScan;
 
   @override
@@ -125,7 +151,7 @@ class _HeroSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventario al instante',
+            title,
             style: TextStyle(
               color: scheme.onPrimary,
               fontSize: 20,
@@ -134,7 +160,7 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Escanea y actualiza existencias sin conexión.',
+            subtitle,
             style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.85)),
           ),
           const SizedBox(height: 16),
@@ -145,7 +171,7 @@ class _HeroSection extends StatelessWidget {
               foregroundColor: scheme.primary,
             ),
             icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Escanear ahora'),
+            label: Text(scanLabel),
           ),
         ],
       ),
@@ -154,9 +180,12 @@ class _HeroSection extends StatelessWidget {
 }
 
 class _LowStockBanner extends StatelessWidget {
-  const _LowStockBanner({required this.count, required this.onTap});
+  const _LowStockBanner({
+    required this.message,
+    required this.onTap,
+  });
 
-  final int count;
+  final String message;
   final VoidCallback onTap;
 
   @override
@@ -176,7 +205,7 @@ class _LowStockBanner extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '$count producto(s) llegaron a su stock mínimo',
+                  message,
                   style: TextStyle(
                     color: scheme.onErrorContainer,
                     fontWeight: FontWeight.w600,

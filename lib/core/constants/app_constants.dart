@@ -6,6 +6,9 @@ class AppConstants {
   static const String settingStoreName = 'store_name';
   static const String defaultStoreName = 'Mi Negocio';
 
+  static const String settingLanguage = 'language';
+  static const String defaultLanguage = 'es';
+
   /// Silencio total tras cada conteo: evita dobles sumas al sostener el producto.
   static const Duration applyLockout = Duration(milliseconds: 600);
 

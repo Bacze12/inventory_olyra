@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/i18n/app_strings.dart';
 import '../data/database/app_database.dart';
 import '../data/repositories/movement_repository.dart';
 import '../data/repositories/product_repository.dart';
@@ -10,6 +12,7 @@ import '../features/home/home_screen.dart';
 import '../features/products/product_provider.dart';
 import '../features/reports/report_provider.dart';
 import '../features/scanner/scanner_provider.dart';
+import '../features/settings/language_provider.dart';
 import 'theme/app_theme.dart';
 
 class InventarioApp extends StatelessWidget {
@@ -44,12 +47,28 @@ class InventarioApp extends StatelessWidget {
             settingsRepository: ctx.read<SettingsRepository>(),
           )..init(),
         ),
+        ChangeNotifierProvider<LanguageProvider>(
+          create: (ctx) => LanguageProvider(ctx.read<SettingsRepository>())
+            ..init(),
+        ),
       ],
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        home: const HomeScreen(),
+      child: Builder(
+        builder: (context) {
+          final language = context.watch<LanguageProvider>();
+          return MaterialApp(
+            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            locale: language.locale,
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const HomeScreen(),
+          );
+        },
       ),
     );
   }
