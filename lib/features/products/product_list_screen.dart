@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/product.dart';
-import '../printer/mass_label_screen.dart';
 import 'product_form_screen.dart';
 import 'product_provider.dart';
 import 'widgets/product_card.dart';
@@ -37,17 +36,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Productos'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.label_outline),
-            tooltip: 'Impresión masiva de etiquetas',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MassLabelScreen()),
-              );
-            },
-          ),
-        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: Padding(

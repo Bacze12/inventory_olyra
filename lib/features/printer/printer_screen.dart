@@ -4,7 +4,6 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/product.dart';
-import '../../core/utils/formatters.dart';
 import '../products/product_provider.dart';
 import 'label_print_service.dart';
 import 'thermal_print_service.dart';
@@ -43,41 +42,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
     messenger.showSnackBar(
       const SnackBar(content: Text('Diálogo de impresión cerrado')),
     );
-  }
-
-  /// Descarga en un solo PDF las etiquetas de todos los productos que
-  /// coinciden con la búsqueda (o de todos si no hay filtro).
-  Future<void> _downloadAll() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final products = context.read<ProductProvider>().products;
-    if (!mounted) return;
-    if (products.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No hay productos para descargar')),
-      );
-      return;
-    }
-
-    messenger.showSnackBar(
-      SnackBar(content: Text('Generando ${products.length} etiquetas…')),
-    );
-    try {
-      final bytes = await _labelService.buildLabelsPdf(products);
-      if (!mounted) return;
-      await Printing.sharePdf(
-        bytes: bytes,
-        filename: 'etiquetas_${fileStamp()}.pdf',
-      );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '${products.length} etiquetas listas para guardar o compartir',
-          ),
-        ),
-      );
-    } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
-    }
   }
 
   Future<void> _printViaBluetooth(Product product) async {
@@ -146,28 +110,6 @@ class _PrinterScreenState extends State<PrinterScreen> {
                 hintText: 'Buscar producto…',
                 prefixIcon: Icon(Icons.search),
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${provider.products.length} '
-                    '${provider.products.length == 1 ? 'producto' : 'productos'}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _downloadAll,
-                  icon: const Icon(Icons.download_outlined, size: 18),
-                  label: const Text('Descargar todas'),
-                ),
-              ],
             ),
           ),
           Expanded(

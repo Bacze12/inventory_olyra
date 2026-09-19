@@ -1,37 +1,12 @@
-import 'dart:async';
-import 'dart:io' show InternetAddress, Platform;
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/config/app_config.dart';
 import '../../core/constants/app_constants.dart';
-import '../../core/utils/formatters.dart';
-import '../../data/models/product.dart';
-import '../../data/repositories/product_repository.dart';
-import '../../data/repositories/sales_repository.dart';
-import '../../data/services/pairing_service.dart';
-import '../../data/services/sync_service.dart';
-import '../../services/global_scanner_redirect.dart';
-import '../../services/scanner_input_service.dart';
-import '../../services/windows_update_service.dart';
-import '../../views/pairing/desktop_pairing_view.dart';
-import '../../views/pairing/mobile_scan_pairing_view.dart';
-import '../../views/pos/pos_desktop_view.dart';
-import '../../views/sales/sales_history_view.dart';
-import '../activation/license_about_dialog.dart';
-import '../activation/license_status_banner.dart';
-import '../products/product_form_screen.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
 import '../reports/report_screen.dart';
 import '../scanner/scanner_screen.dart';
-import '../sync/cloud_sync_panel.dart';
-import '../sync/olyra_cloud_sync.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,164 +16,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isDesktop() =>
-      kIsWeb ? false : (Platform.isWindows || Platform.isLinux);
   @override
   void initState() {
     super.initState();
-    // Escucha global de pistolas HID: SOLO enruta lecturas al formulario de
-    // producto (Inventario/Registro); nunca navega por sí mismo al POS.
-    ScannerInputService.instance.install();
-    // Fuera de la vista de ventas (gestión de inventario) una lectura de la
-    // pistola redirige a la pantalla "Registrar / Editar Producto", que es la
-    // vista predeterminada del escáner en el Menú Principal.
-    ScannerInputService.instance
-        .register(GlobalGunRedirect(_redirectScannedBarcode));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().load();
     });
-  }
-
-  /// En la PC vinculada levanta el servidor local (Shelf) para que el
-  /// teléfono pueda sincronizar el catálogo y las ventas por Wi-Fi.
-  /// Solo se ejecuta cuando la sincronización móvil está habilitada.
-  Future<void> _bootstrapSyncServer(BuildContext context) async {
-    if (AppConfig.isStandalone) return; // Modo 100% local: sin servidor ni red.
-    if (!_isDesktop()) return;
-    final pairing = context.read<PairingService>();
-    final products = context.read<ProductRepository>();
-    final sales = context.read<SalesRepository>();
-    if (!await pairing.isPaired) return;
-    final credentials = await pairing.credentials();
-
-    final server = SyncServer(
-      products: products,
-      sales: sales,
-      tenantId: credentials?.tenantId,
-    );
-    // 0.0.0.0: escucha en TODAS las interfaces para aceptar el celular de la
-    // LAN (nunca loopback, que rechazaría peticiones de otros dispositivos).
-    if (!await server.start(bindAddress: InternetAddress.anyIPv4)) {
-      debugPrint('SyncServer: puerto ${SyncServer.defaultPort} ocupado.');
-      return;
-    }
-    SyncServer.appServer = server;
-
-    // Guarda la IP local para que el teléfono vinculado la use sin mDNS.
-    final ip = await pairing.detectLanIpv4();
-    if (ip != null) {
-      await pairing.saveSyncServerUrl(
-        'http://$ip:${SyncServer.defaultPort}',
-      );
-    }
-  }
-
-  /// Evita apilar formularios si la pistola entrega el código dos veces
-  /// seguidas (o el usuario escanea mientras ya se está navegando).
-  bool _scanRedirectInProgress = false;
-
-  /// Redirige una lectura de la pistola HID (fuera de la vista de ventas) a la
-  /// pantalla "Registrar / Editar Producto":
-  ///
-  /// * El código YA existe en la base local → abre la ficha del producto para
-  ///   editar stock/precio.
-  /// * El código NO existe → abre "Nuevo producto" con el código pre-rellenado.
-  ///
-  /// NUNCA abre el punto de venta desde el Menú Principal.
-  Future<void> _redirectScannedBarcode(String raw) async {
-    if (_scanRedirectInProgress) return;
-    _scanRedirectInProgress = true;
-    try {
-      await _openProductFromScan(raw);
-    } finally {
-      _scanRedirectInProgress = false;
-    }
-  }
-
-  Future<void> _openProductFromScan(String raw) async {
-    final code = normalizeBarcode(raw);
-    if (code.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
-
-    Product? product;
-    try {
-      product = await context.read<ProductRepository>().byBarcode(code);
-    } catch (_) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo consultar el código en la base local'),
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => product != null
-            ? ProductFormScreen(product: product)
-            : ProductFormScreen(initialBarcode: code),
-      ),
-    );
-  }
-
-  Future<void> _syncNow(BuildContext context) async {
-    final syncService = context.read<SyncService>();
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const _SyncProgressDialog(),
-    );
-
-    final result = await syncService.syncNow();
-    if (!context.mounted) return;
-    navigator.pop();
-    messenger.showSnackBar(
-      SnackBar(content: Text(result.describe())),
-    );
-  }
-
-  Future<void> _runDiagnostics(BuildContext context) async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => const _DiagnosticsDialog(),
-    );
-  }
-
-  Future<void> _searchUpdates() async {
-    if (kIsWeb || !Platform.isWindows) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Buscando actualizaciones…')),
-      );
-
-    final result = await WindowsUpdateService.forceCheckForUpdates(context);
-    if (!mounted) return;
-
-    final info = await PackageInfo.fromPlatform();
-    final String message = switch (result) {
-      UpdateCheckResult.updateAvailable =>
-        'Tienes una nueva versión disponible',
-      UpdateCheckResult.notAvailable =>
-        'Tienes la última versión instalada (v${info.version})',
-      UpdateCheckResult.failed =>
-        'No se pudo conectar al servidor de actualizaciones',
-    };
-
-    if (result == UpdateCheckResult.updateAvailable) {
-      // forceCheckForUpdates ya desplegó el modal de actualización.
-      messenger.hideCurrentSnackBar();
-      return;
-    }
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _push(BuildContext context, Widget screen) async {
@@ -216,31 +39,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppConstants.appName),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: 'Acerca de · Licencia',
-            onPressed: () => showLicenseAboutDialog(
-              context,
-              onSearchUpdates: _searchUpdates,
-            ),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const LicenseStatusBanner(),
           _HeroSection(
-            // "Escanear ahora" abre el formulario de inventario (nuevo
-            // producto con foco en código), NO el punto de venta.
-            onScan: () => _push(context, const ProductFormScreen()),
+            onScan: () => _push(context, const ScannerScreen()),
           ),
           const SizedBox(height: 12),
-          if (_isDesktop() && AppConfig.enableMobileSync) ...[
-            const _ServerStatusCard(),
-            const SizedBox(height: 12),
-          ],
           if (productProvider.lowStockCount > 0) ...[
             _LowStockBanner(
               count: productProvider.lowStockCount,
@@ -248,21 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          const SizedBox(height: 12),
-          _MenuTile(
-            icon: Icons.point_of_sale,
-            title: 'Punto de venta',
-            subtitle: 'Venta rápida en PC · F12 para cobrar',
-            onTap: () => _push(context, const PosDesktopView()),
-          ),
-          const SizedBox(height: 12),
-          _MenuTile(
-            icon: Icons.receipt_long_outlined,
-            title: 'Historial de ventas',
-            subtitle: 'Ventas del POS · detalle y anulación',
-            onTap: () => _push(context, const SalesHistoryView()),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -300,51 +91,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _MenuTile(
                   icon: Icons.qr_code_scanner,
                   title: 'Escáner',
-                  subtitle: _isDesktop()
-                      ? 'Pistola en cualquier pantalla'
-                      : 'Entradas y salidas',
-                  onTap: () => _push(
-                    context,
-                    _isDesktop()
-                        ? const PosDesktopView()
-                        : const ScannerScreen(),
-                  ),
+                  subtitle: 'Entradas y salidas',
+                  onTap: () => _push(context, const ScannerScreen()),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (AppConfig.enableCloudSync) _CloudSyncTile(),
-          if (AppConfig.enableMobileSync)
-            _MenuTile(
-              icon: Icons.devices,
-              title: 'Vincular dispositivo',
-              subtitle: 'Emparejar esta PC con un celular (QR / PIN)',
-              onTap: () => _push(
-                context,
-                _isDesktop()
-                    ? const DesktopPairingView()
-                    : const MobileScanPairingView(),
-              ),
-            ),
-          if (!_isDesktop() && AppConfig.enableMobileSync) ...[
-            const SizedBox(height: 12),
-            _MenuTile(
-              icon: Icons.wifi_tethering,
-              title: 'Sincronizar con PC',
-              subtitle: 'Bajar catálogo y subir ventas (Wi-Fi)',
-              onTap: () => _syncNow(context),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => _runDiagnostics(context),
-                icon: const Icon(Icons.healing, size: 18),
-                label: const Text('Probar conexión (diagnóstico)'),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -432,59 +184,10 @@ class _LowStockBanner extends StatelessWidget {
                 ),
               ),
               Icon(Icons.chevron_right, color: scheme.onErrorContainer),
-],
+            ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SyncProgressDialog extends StatelessWidget {
-  const _SyncProgressDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      content: Row(
-        children: [
-          const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 3),
-          ),
-          const SizedBox(width: 16),
-          const Expanded(
-            child: Text('Sincronizando con la PC…'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CloudSyncTile extends StatelessWidget {
-  const _CloudSyncTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final cloud = context.watch<OlyraCloudSync>();
-
-    final String subtitle = switch (cloud.state) {
-      OlyraCloudState.needsActivation =>
-        'Licencia no activa: activa antes de sincronizar',
-      OlyraCloudState.validating => 'Validando con olyra.cl…',
-      OlyraCloudState.syncing => 'Sincronizando…',
-      OlyraCloudState.error => 'Error de sincronización · reintenta',
-      OlyraCloudState.active => 'Nube Activa · Sincronizado',
-      OlyraCloudState.unconfigured => 'Nube lista · revalida para conectar',
-    };
-
-    return _MenuTile(
-      icon: Icons.cloud_sync_outlined,
-      title: 'Nube y respaldo',
-      subtitle: subtitle,
-      onTap: () => showCloudSyncPanel(context),
     );
   }
 }
@@ -537,288 +240,6 @@ class _MenuTile extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Indicador del servidor local (Shelf) de la PC.
-///
-/// Verde/activo: "Servidor Sync Activo - http://IP:8080" con copia de la IP;
-/// gris/inactivo: "Servidor Inactivo (Dispositivo no vinculado)".
-class _ServerStatusCard extends StatefulWidget {
-  const _ServerStatusCard();
-
-  @override
-  State<_ServerStatusCard> createState() => _ServerStatusCardState();
-}
-
-class _ServerStatusCardState extends State<_ServerStatusCard> {
-  bool _active = false;
-  String? _serverUrl;
-  Timer? _refresh;
-
-  @override
-  void initState() {
-    super.initState();
-    _update();
-    _refresh = Timer.periodic(const Duration(seconds: 3), (_) => _update());
-  }
-
-  @override
-  void dispose() {
-    _refresh?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _update() async {
-    final pairing = context.read<PairingService>();
-    final url = await pairing.syncServerUrl();
-    if (!mounted) return;
-    setState(() {
-      _active = SyncServer.appServer != null &&
-          url != null &&
-          url.isNotEmpty;
-      _serverUrl = url;
-    });
-  }
-
-  Future<void> _copy() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final ip = Uri.tryParse(_serverUrl ?? '')?.host;
-    if (ip == null || ip.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: ip));
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('IP copiada al portapapeles'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// Diálogo de diagnóstico: regla de firewall y URL de prueba del health
-  /// check para verificar desde el navegador del celular.
-  Future<void> _showConnectionHelp() async {
-    final ip = Uri.tryParse(_serverUrl ?? '')?.host ?? '';
-    final healthUrl = ip.isEmpty
-        ? ''
-        : 'http://$ip:${SyncServer.defaultPort}/api/v1/sync/health';
-
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ayuda de conexión Wi-Fi'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Si el celular no encuentra la PC:'),
-              const SizedBox(height: 8),
-              const Text('• Verifica que ambos estén en la MISMA red Wi-Fi.'),
-              const Text(
-                '• Abre el puerto 8080 en el Firewall de Windows '
-                '(ejecuta en PowerShell como administrador):',
-              ),
-              const SizedBox(height: 8),
-              _CopyableCode(
-                text: SyncServer.firewallRule,
-                label: 'Copiar regla de firewall',
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '• Prueba la PC desde el navegador del celular con el health '
-                'check:',
-              ),
-              const SizedBox(height: 8),
-              if (healthUrl.isNotEmpty)
-                _CopyableCode(text: healthUrl, label: 'Copiar URL de prueba'),
-              const SizedBox(height: 16),
-              const Text(
-                'Si responde {"status":"ok"} con el mismo tenant_id, la PC '
-                'es alcanzable y el sync funcionará.',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final Color background = _active
-        ? const Color(0xFFE4F4E6)
-        : scheme.surfaceContainerHighest;
-    final Color foreground = _active
-        ? const Color(0xFF1B5E20)
-        : scheme.onSurfaceVariant;
-
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(
-              _active ? Icons.check_circle : Icons.cloud_off,
-              size: 22,
-              color: foreground,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _active
-                        ? 'Servidor Sync Activo'
-                        : 'Servidor Inactivo (Dispositivo no vinculado)',
-                    style: TextStyle(
-                      color: foreground,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (_active) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      _serverUrl ?? '',
-                      key: const ValueKey('server_status_url'),
-                      style: TextStyle(color: foreground, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (_active)
-              IconButton(
-                tooltip: 'Copiar IP',
-                icon: const Icon(Icons.copy_rounded, size: 20),
-                color: foreground,
-                onPressed: _copy,
-              ),
-            if (_active)
-              IconButton(
-                tooltip: 'Ayuda de conexión',
-                icon: const Icon(Icons.help_outline, size: 20),
-                color: foreground,
-                onPressed: _showConnectionHelp,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Código o URL con botón para copiarlo (técnica de diagnóstico).
-class _CopyableCode extends StatelessWidget {
-  const _CopyableCode({required this.text, required this.label});
-
-  final String text;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            text,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                await Clipboard.setData(ClipboardData(text: text));
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(label),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(label),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Diálogo que ejecuta [SyncService.diagnoseConnection] y muestra el resultado
-/// en pantalla (URL, TCP, HTTP) para diagnosticar sin consola.
-class _DiagnosticsDialog extends StatefulWidget {
-  const _DiagnosticsDialog();
-
-  @override
-  State<_DiagnosticsDialog> createState() => _DiagnosticsDialogState();
-}
-
-class _DiagnosticsDialogState extends State<_DiagnosticsDialog> {
-  String? _report;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final syncService = context.read<SyncService>();
-    try {
-      final report = await syncService.diagnoseConnection();
-      if (!mounted) return;
-      setState(() => _report = report);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = 'No se pudo ejecutar el diagnóstico: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final text = _error ?? _report;
-    return AlertDialog(
-      title: const Text('Diagnóstico de conexión'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: text == null
-            ? const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : _CopyableCode(text: text, label: 'Copiar diagnóstico'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cerrar'),
-        ),
-      ],
     );
   }
 }

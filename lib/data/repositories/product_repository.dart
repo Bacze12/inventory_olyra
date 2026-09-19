@@ -36,19 +36,6 @@ class ProductRepository {
     return rows.map(Product.fromMap).toList();
   }
 
-  /// Productos modificados/creados después de `updatedSince` (ISO).
-  /// Se usa para subir solo la "changela" a la nube (last-write-wins).
-  Future<List<Product>> updatedSince(String updatedSince) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      'products',
-      where: 'updated_at > ?',
-      whereArgs: [updatedSince],
-      orderBy: 'updated_at ASC',
-    );
-    return rows.map(Product.fromMap).toList();
-  }
-
   Future<Product?> byId(int id) async {
     final db = await _db.database;
     final rows = await db.query(
@@ -99,62 +86,5 @@ class ProductRepository {
     final db = await _db.database;
     final result = await db.rawQuery('SELECT COUNT(*) AS c FROM products');
     return Sqflite.firstIntValue(result) ?? 0;
-  }
-
-  /// Copia un producto recibido del catálogo de la PC (sync local). Si el
-  /// código ya existe actualiza nombre/stock/precio; si no, lo inserta.
-  Future<int> upsertFromSync({
-    required String barcode,
-    required String name,
-    required int quantity,
-    required int minStock,
-    required double price,
-    required String updatedAt,
-  }) async {
-    final existing = await byBarcode(barcode);
-    if (existing == null) {
-      return insert(
-        Product(
-          name: name,
-          barcode: barcode,
-          quantity: quantity,
-          minStock: minStock,
-          price: price,
-          createdAt: updatedAt,
-          updatedAt: updatedAt,
-        ),
-      );
-    }
-    await update(
-      existing.copyWith(
-        name: name,
-        quantity: quantity,
-        minStock: minStock,
-        price: price,
-        updatedAt: updatedAt,
-      ),
-    );
-    return existing.id!;
-  }
-
-  /// Descuenta `quantity` del stock al recibir una venta remota (sync Wi-Fi).
-  ///
-  /// Devuelve false si el producto no existe o el stock actual no alcanza;
-  /// en ese caso la venta igual se registra y se marca con `stock_warning`.
-  Future<bool> deductStockFromSync(String barcode, int quantity) async {
-    final existing = await byBarcode(barcode);
-    if (existing == null || quantity <= 0) return false;
-
-    final db = await _db.database;
-    final updated = await db.update(
-      'products',
-      {
-        'quantity': existing.quantity - quantity,
-        'updated_at': nowIso(),
-      },
-      where: 'id = ? AND quantity >= ?',
-      whereArgs: [existing.id, quantity],
-    );
-    return updated > 0;
   }
 }

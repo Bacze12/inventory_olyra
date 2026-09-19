@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
-import '../../services/scanner_input_service.dart';
 import '../scanner/barcode_capture_screen.dart';
 import 'product_provider.dart';
 
@@ -24,13 +23,10 @@ class ProductFormScreen extends StatefulWidget {
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final FocusNode _barcodeFocus = FocusNode();
   late final TextEditingController _nameController;
   late final TextEditingController _barcodeController;
   late final TextEditingController _quantityController;
   late final TextEditingController _minStockController;
-  late final TextEditingController _priceController;
-  late final _ProductFormSink _gunSink;
 
   bool _saving = false;
 
@@ -48,39 +44,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _minStockController = TextEditingController(
       text: product?.minStock.toString() ?? '0',
     );
-    _priceController = TextEditingController(
-      text: product?.price.toStringAsFixed(2) ?? '',
-    );
-    _gunSink = _ProductFormSink(this);
-    ScannerInputService.instance.register(_gunSink);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // Foco nativo en el código de barras para que una pistola HID escriba
-      // directo en el campo (compatibilidad nativa), sin navegar al POS.
-      if (_barcodeController.text.trim().isEmpty) {
-        _barcodeFocus.requestFocus();
-      }
-    });
   }
 
   @override
   void dispose() {
-    ScannerInputService.instance.unregister(_gunSink);
-    _barcodeFocus.dispose();
     _nameController.dispose();
     _barcodeController.dispose();
     _quantityController.dispose();
     _minStockController.dispose();
-    _priceController.dispose();
     super.dispose();
-  }
-
-  /// Aplica una lectura completa de la pistola al campo de código de barras.
-  void _applyGunScan(String raw) {
-    final code = normalizeBarcode(raw);
-    if (code.isEmpty) return;
-    setState(() => _barcodeController.text = code);
-    _barcodeFocus.requestFocus();
   }
 
   bool get _isEditing => widget.product != null;
@@ -116,8 +88,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   )),
                 ],
               ),
-              const SizedBox(height: 16),
-              _priceField(),
               const SizedBox(height: 28),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
@@ -151,7 +121,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Widget _barcodeField() => TextFormField(
         controller: _barcodeController,
-        focusNode: _barcodeFocus,
         keyboardType: TextInputType.visiblePassword,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
@@ -190,29 +159,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         },
       );
 
-  Widget _priceField() => TextFormField(
-        controller: _priceController,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'^\d{0,9}([.,]\d{0,2})?')),
-        ],
-        decoration: const InputDecoration(
-          labelText: 'Precio',
-          hintText: '0.00',
-          prefixIcon: Icon(Icons.attach_money_outlined),
-        ),
-        validator: (value) {
-          final parsed = _parsePrice(value);
-          if (parsed == null || parsed < 0) return 'Precio inválido';
-          return null;
-        },
-      );
-
-  double? _parsePrice(String? value) {
-    if (value == null || value.trim().isEmpty) return 0.0;
-    return double.tryParse(value.trim().replaceAll(',', '.'));
-  }
-
   Future<void> _scanBarcode() async {
     final messenger = ScaffoldMessenger.of(context);
     final code = await Navigator.of(context).push<String>(
@@ -241,7 +187,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       barcode: normalizeBarcode(_barcodeController.text),
       quantity: int.tryParse(_quantityController.text) ?? 0,
       minStock: int.tryParse(_minStockController.text) ?? 0,
-      price: _parsePrice(_priceController.text) ?? 0.0,
       createdAt: base?.createdAt ?? now,
       updatedAt: now,
     );
@@ -256,48 +201,4 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
     Navigator.of(context).pop(true);
   }
-}
-
-/// Sink de la pistola HID para el formulario de producto.
-///
-/// - Si el campo de código de barras tiene el foco, la pistola escribe NORMAL
-///   (compatibilidad nativa con TextField); no se intercepta nada.
-/// - Si el campo NO tiene foco, se acumula la tira en un búfer y al llegar el
-///   Enter se completa el campo `barcode` automáticamente.
-class _ProductFormSink implements ScannerInputSink {
-  _ProductFormSink(this._state);
-
-  final _ProductFormScreenState _state;
-  final StringBuffer _buffer = StringBuffer();
-
-  @override
-  bool handleGunKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-
-    final key = event.logicalKey;
-    final isEnter = key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter;
-
-    if (_state._barcodeFocus.hasFocus) {
-      // Foco nativo: el TextField recibe los caracteres directo.
-      return false;
-    }
-
-    if (isEnter) {
-      final text = _buffer.toString();
-      _buffer.clear();
-      if (normalizeBarcode(text).isEmpty) return false;
-      _state._applyGunScan(text);
-      return true;
-    }
-
-    final char = event.character;
-    if (char != null && char.isNotEmpty) {
-      _buffer.write(char);
-    }
-    return false;
-  }
-
-  @override
-  void clearBuffer() => _buffer.clear();
 }
