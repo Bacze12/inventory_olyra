@@ -92,14 +92,14 @@ class ReportProvider extends ChangeNotifier {
     return service.build(format, _snapshot, storeName: _storeName);
   }
 
+  String pdfFileName() => '${AppConstants.pdfFilePrefix}${fileStamp()}.pdf';
+
   Future<String?> saveToDevice(Uint8List bytes) async {
     try {
       final documents = await path_provider.getApplicationDocumentsDirectory();
       final folder = Directory(p.join(documents.path, AppConstants.reportsFolderName));
       await folder.create(recursive: true);
-      final file = File(
-        p.join(folder.path, '${AppConstants.pdfFilePrefix}${fileStamp()}.pdf'),
-      );
+      final file = File(p.join(folder.path, pdfFileName()));
       await file.writeAsBytes(bytes, flush: true);
       return file.path;
     } catch (_) {

@@ -85,14 +85,15 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _share() async {
     final bytes = _bytes;
     if (bytes == null) return;
-    await Printing.sharePdf(bytes: bytes, filename: 'inventario.pdf');
+    final provider = context.read<ReportProvider>();
+    await Printing.sharePdf(bytes: bytes, filename: provider.pdfFileName());
   }
 
   Future<void> _print() async {
     final provider = context.read<ReportProvider>();
     await Printing.layoutPdf(
       onLayout: (format) async => provider.buildForFormat(format),
-      name: 'inventario.pdf',
+      name: provider.pdfFileName(),
     );
   }
 
