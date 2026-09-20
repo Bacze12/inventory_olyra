@@ -38,6 +38,8 @@ dependencies:
   # Estado simple y ligero para la UI.
   provider: ^6.1.2
   http: ^1.6.0
+  # Abrir enlaces externos (privacy / términos).
+  url_launcher: ^6.3.2
   ota_update: ^7.1.0
   package_info_plus: ^10.2.1
   flutter_localizations:

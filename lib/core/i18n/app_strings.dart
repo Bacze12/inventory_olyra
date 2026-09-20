@@ -27,6 +27,9 @@ class AppStrings {
   static const String homeSettings = 'home.settings';
   static const String settingsTitle = 'settings.title';
   static const String settingsLanguage = 'settings.language';
+  static const String settingsLegal = 'settings.legal';
+  static const String settingsPrivacy = 'settings.privacy';
+  static const String settingsTerms = 'settings.terms';
 
   static const Map<String, Map<String, String>> translations = {
     es: {
@@ -46,6 +49,9 @@ class AppStrings {
       homeSettings: 'Ajustes',
       settingsTitle: 'Ajustes',
       settingsLanguage: 'Idioma',
+      settingsLegal: 'Privacidad y Términos',
+      settingsPrivacy: 'Política de Privacidad',
+      settingsTerms: 'Términos y Condiciones',
     },
     en: {
       appName: 'Inventory',
@@ -64,6 +70,9 @@ class AppStrings {
       homeSettings: 'Settings',
       settingsTitle: 'Settings',
       settingsLanguage: 'Language',
+      settingsLegal: 'Privacy & Terms',
+      settingsPrivacy: 'Privacy Policy',
+      settingsTerms: 'Terms & Conditions',
     },
   };
 
