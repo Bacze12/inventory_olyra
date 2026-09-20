@@ -22,4 +22,7 @@ class AppConstants {
 
   static const String pdfFilePrefix = 'inventario_';
   static const String reportsFolderName = 'reportes';
+
+  static const String privacyUrl = 'https://olyra.cl/projects/4/privacy';
+  static const String termsUrl = 'https://olyra.cl/projects/4/terms';
 }

@@ -27,7 +27,14 @@ class _InMemorySettings implements SettingsRepository {
   }
 }
 
-Widget _buildApp(LanguageProvider provider) => MaterialApp(
+Future<void> Function(Uri) _recordingOpener(List<String> opened) =>
+    (uri) async => opened.add(uri.toString());
+
+Widget _buildApp(
+  LanguageProvider provider, {
+  Future<void> Function(Uri)? linkOpener,
+}) =>
+    MaterialApp(
       locale: provider.locale,
       supportedLocales: const [Locale('es'), Locale('en')],
       localizationsDelegates: const [
@@ -37,7 +44,7 @@ Widget _buildApp(LanguageProvider provider) => MaterialApp(
       ],
       home: ChangeNotifierProvider<LanguageProvider>.value(
         value: provider,
-        child: const SettingsScreen(),
+        child: SettingsScreen(linkOpener: linkOpener),
       ),
     );
 
@@ -90,5 +97,61 @@ void main() {
 
     expect(provider.locale.languageCode, 'es');
     expect(await repository.get(AppConstants.settingLanguage), 'es');
+  });
+
+  testWidgets('muestra la sección de privacidad y términos', (tester) async {
+    final provider = LanguageProvider(repository);
+    await provider.init();
+
+    await tester.pumpWidget(_buildApp(provider));
+
+    expect(find.text('Privacidad y Términos'), findsOneWidget);
+    expect(find.text('Política de Privacidad'), findsOneWidget);
+    expect(find.text('Términos y Condiciones'), findsOneWidget);
+  });
+
+  testWidgets('en inglés muestra la sección de privacidad y términos traducida',
+      (tester) async {
+    repository.set(AppConstants.settingLanguage, 'en');
+    final provider = LanguageProvider(repository);
+    await provider.init();
+
+    await tester.pumpWidget(_buildApp(provider));
+
+    expect(find.text('Privacy & Terms'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(find.text('Terms & Conditions'), findsOneWidget);
+  });
+
+  testWidgets('al tocar Política de Privacidad abre el enlace de privacidad',
+      (tester) async {
+    final provider = LanguageProvider(repository);
+    await provider.init();
+    final opened = <String>[];
+
+    await tester.pumpWidget(
+      _buildApp(provider, linkOpener: _recordingOpener(opened)),
+    );
+
+    await tester.tap(find.text('Política de Privacidad'));
+    await tester.pumpAndSettle();
+
+    expect(opened, [AppConstants.privacyUrl]);
+  });
+
+  testWidgets('al tocar Términos y Condiciones abre el enlace de términos',
+      (tester) async {
+    final provider = LanguageProvider(repository);
+    await provider.init();
+    final opened = <String>[];
+
+    await tester.pumpWidget(
+      _buildApp(provider, linkOpener: _recordingOpener(opened)),
+    );
+
+    await tester.tap(find.text('Términos y Condiciones'));
+    await tester.pumpAndSettle();
+
+    expect(opened, [AppConstants.termsUrl]);
   });
 }
