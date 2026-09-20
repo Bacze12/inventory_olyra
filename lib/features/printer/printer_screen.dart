@@ -9,7 +9,12 @@ import 'label_print_service.dart';
 import 'thermal_print_service.dart';
 
 class PrinterScreen extends StatefulWidget {
-  const PrinterScreen({super.key});
+  const PrinterScreen({
+    super.key,
+    this.labelService = const LabelPrintService(),
+  });
+
+  final LabelPrintService labelService;
 
   @override
   State<PrinterScreen> createState() => _PrinterScreenState();
@@ -17,7 +22,6 @@ class PrinterScreen extends StatefulWidget {
 
 class _PrinterScreenState extends State<PrinterScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final LabelPrintService _labelService = const LabelPrintService();
   final ThermalPrintService _thermalService = const ThermalPrintService();
 
   Product? _selected;
@@ -38,7 +42,16 @@ class _PrinterScreenState extends State<PrinterScreen> {
 
   Future<void> _printPdf(Product product) async {
     final messenger = ScaffoldMessenger.of(context);
-    await _labelService.printLabel(product);
+    await widget.labelService.printLabel(product);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Diálogo de impresión cerrado')),
+    );
+  }
+
+  Future<void> _printAll(List<Product> products) async {
+    if (products.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await widget.labelService.printAllLabels(products);
     messenger.showSnackBar(
       const SnackBar(content: Text('Diálogo de impresión cerrado')),
     );
@@ -112,6 +125,21 @@ class _PrinterScreenState extends State<PrinterScreen> {
               ),
             ),
           ),
+          if (provider.products.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _printAll(provider.products),
+                      icon: const Icon(Icons.local_printshop_outlined),
+                      label: const Text('Imprimir todos (PDF)'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: provider.products.isEmpty
                 ? const _NoProducts()
@@ -169,7 +197,8 @@ class _PrinterScreenState extends State<PrinterScreen> {
               SizedBox(
                 height: 180,
                 child: PdfPreview(
-                  build: (format) async => _labelService.buildLabelPdf(product),
+                  build: (format) async =>
+                      widget.labelService.buildLabelPdf(product),
                   canChangeOrientation: false,
                   useActions: false,
                   maxPageWidth: 600,
