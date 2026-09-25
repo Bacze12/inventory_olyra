@@ -6,6 +6,9 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/i18n/app_strings.dart';
+import '../pro/pro_gate.dart';
+import '../pro/pro_provider.dart';
 import 'report_provider.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -50,6 +53,12 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _generate() async {
+    // Armar el PDF completo es la parte cara del módulo y el paywall vende la
+    // exportación como función PRO: sin licencia se ofrece la suscripción en
+    // lugar de generar el documento.
+    if (!await ProGate.allowPdfExport(context)) return;
+    if (!mounted) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<ReportProvider>();
     setState(() => _busy = true);
@@ -100,6 +109,7 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ReportProvider>();
+    final pro = context.watch<ProProvider>();
     final hasReport = _bytes != null;
 
     return Scaffold(
@@ -122,15 +132,22 @@ class _ReportScreenState extends State<ReportScreen> {
           _StatsRow(provider: provider),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: _busy
-                  ? const LinearProgressIndicator()
-                  : FilledButton.icon(
-                      onPressed: _generate,
-                      icon: const Icon(Icons.download_done_outlined),
-                      label: const Text('Generar reporte PDF'),
-                    ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _busy
+                      ? const LinearProgressIndicator()
+                      : FilledButton.icon(
+                          onPressed: _generate,
+                          icon: const Icon(Icons.download_done_outlined),
+                          label: const Text('Generar reporte PDF'),
+                        ),
+                ),
+                if (!pro.esPro) ...[
+                  const SizedBox(width: 8),
+                  const _ProBadge(),
+                ],
+              ],
             ),
           ),
           if (hasReport)
@@ -171,6 +188,42 @@ class _ReportScreenState extends State<ReportScreen> {
                     canChangeOrientation: false,
                   )
                 : const _NoReportHint(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Avisa que la exportación es una función PRO antes de que el usuario pulse el
+/// botón y descubra el paywall.
+class _ProBadge extends StatelessWidget {
+  const _ProBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      key: const Key('reportProBadge'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 14, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 4),
+          Text(
+            AppStrings.translate(languageCode, AppStrings.proBadge),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSecondaryContainer,
+            ),
           ),
         ],
       ),

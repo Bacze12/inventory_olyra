@@ -24,6 +24,8 @@ class AppStrings {
   static const String homeLabelSubtitle = 'home.label.subtitle';
   static const String homeScanner = 'home.scanner';
   static const String homeScannerSubtitle = 'home.scanner.subtitle';
+  static const String homeOsa = 'home.osa';
+  static const String homeOsaSubtitle = 'home.osa.subtitle';
   static const String homeSettings = 'home.settings';
   static const String settingsTitle = 'settings.title';
   static const String settingsLanguage = 'settings.language';
@@ -33,6 +35,11 @@ class AppStrings {
   static const String settingsPlan = 'settings.plan';
   static const String settingsPlanFree = 'settings.plan.free';
   static const String settingsPlanPro = 'settings.plan.pro';
+  static const String proBadge = 'pro.badge';
+  static const String osaTitle = 'osa.title';
+  static const String osaSubtitle = 'osa.subtitle';
+  static const String osaPendingTitle = 'osa.pending.title';
+  static const String osaPendingBody = 'osa.pending.body';
   static const String paywallTitle = 'paywall.title';
   static const String paywallHeadline = 'paywall.headline';
   static const String paywallSubtitle = 'paywall.subtitle';
@@ -49,6 +56,8 @@ class AppStrings {
   static const String paywallPriceLoading = 'paywall.price.loading';
   static const String paywallPriceUnavailable = 'paywall.price.unavailable';
   static const String paywallLegal = 'paywall.legal';
+  static const String paywallOsaLocked = 'paywall.locked.osa';
+  static const String paywallPdfLocked = 'paywall.locked.pdf';
   static const String paywallNoticePurchased = 'paywall.notice.purchased';
   static const String paywallNoticePending = 'paywall.notice.pending';
   static const String paywallNoticePrice = 'paywall.notice.price';
@@ -81,6 +90,8 @@ class AppStrings {
       homeLabelSubtitle: 'Bluetooth / PDF',
       homeScanner: 'Escáner',
       homeScannerSubtitle: 'Entradas y salidas',
+      homeOsa: 'Métricas OSA',
+      homeOsaSubtitle: 'Disponibilidad en anaquel',
       homeSettings: 'Ajustes',
       settingsTitle: 'Ajustes',
       settingsLanguage: 'Idioma',
@@ -90,6 +101,13 @@ class AppStrings {
       settingsPlan: 'Plan',
       settingsPlanFree: 'Gratis',
       settingsPlanPro: 'BodegaFlow PRO',
+      proBadge: 'PRO',
+      osaTitle: 'Métricas OSA',
+      osaSubtitle: 'Disponibilidad en anaquel y reposición',
+      osaPendingTitle: 'Estamos calculando tu primera medición',
+      osaPendingBody:
+          'Tu licencia PRO está activa. Los indicadores de disponibilidad en '
+              'anaquel se habilitan en la próxima actualización.',
       paywallTitle: 'BodegaFlow PRO',
       paywallHeadline: 'Tu bodega, sin límites',
       paywallSubtitle:
@@ -112,6 +130,10 @@ class AppStrings {
           'Suscripción mensual administrada por Google Play. Se renueva '
               'automáticamente hasta que la canceles desde los ajustes de tu '
               'cuenta de Google.',
+      paywallOsaLocked:
+          'Las métricas OSA y la reposición son exclusivas de BodegaFlow PRO',
+      paywallPdfLocked:
+          'La exportación de reportes PDF es exclusiva de BodegaFlow PRO',
       paywallNoticePurchased: '¡Listo! Ya tienes BodegaFlow PRO',
       paywallNoticePending: 'La compra quedó pendiente de confirmación',
       paywallNoticePrice: 'No pudimos consultar el precio en Google Play',
@@ -144,6 +166,8 @@ class AppStrings {
       homeLabelSubtitle: 'Bluetooth / PDF',
       homeScanner: 'Scanner',
       homeScannerSubtitle: 'Entries and exits',
+      homeOsa: 'OSA metrics',
+      homeOsaSubtitle: 'On-shelf availability',
       homeSettings: 'Settings',
       settingsTitle: 'Settings',
       settingsLanguage: 'Language',
@@ -153,6 +177,13 @@ class AppStrings {
       settingsPlan: 'Plan',
       settingsPlanFree: 'Free',
       settingsPlanPro: 'BodegaFlow PRO',
+      proBadge: 'PRO',
+      osaTitle: 'OSA metrics',
+      osaSubtitle: 'On-shelf availability and restocking',
+      osaPendingTitle: 'We are calculating your first measurement',
+      osaPendingBody:
+          'Your PRO license is active. The on-shelf availability indicators are '
+              'enabled in the next update.',
       paywallTitle: 'BodegaFlow PRO',
       paywallHeadline: 'Your store, no limits',
       paywallSubtitle:
@@ -175,6 +206,9 @@ class AppStrings {
       paywallLegal:
           'Monthly subscription handled by Google Play. It renews automatically '
               'until you cancel it from your Google account settings.',
+      paywallOsaLocked:
+          'OSA metrics and restocking are exclusive to BodegaFlow PRO',
+      paywallPdfLocked: 'PDF report export is exclusive to BodegaFlow PRO',
       paywallNoticePurchased: 'All set! You now have BodegaFlow PRO',
       paywallNoticePending: 'The purchase is still pending confirmation',
       paywallNoticePrice: 'We could not fetch the price from Google Play',

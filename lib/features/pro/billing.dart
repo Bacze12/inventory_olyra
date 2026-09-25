@@ -1,8 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-/// Identificador de la suscripción PRO en Google Play.
-const String proProductId = 'bodegaflow_pro_monthly';
-
 /// Oferta de suscripción tal como la publica la tienda.
 @immutable
 class SubscriptionOffer {

@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:scanflow/core/constants/app_constants.dart';
 import 'package:scanflow/core/i18n/app_strings.dart';
 import 'package:scanflow/data/models/product.dart';
 import 'package:scanflow/data/repositories/product_repository.dart';
@@ -64,7 +65,7 @@ class _FakeBilling implements BillingGateway {
   @override
   Future<List<SubscriptionOffer>> loadOffers() async => const [
         SubscriptionOffer(
-          productId: 'bodegaflow_pro_monthly',
+          productId: AppConstants.proProductId,
           title: 'BodegaFlow PRO',
           description: 'Suscripción mensual',
           price: 'CLP 2.990',
@@ -124,6 +125,49 @@ void useTallViewport(WidgetTester tester) {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 }
+
+/// Disparador genérico de una acción restringida (métricas OSA, exportar PDF)
+/// para comprobar cómo se comporta cada guarda.
+class _RestrictedHarness extends StatelessWidget {
+  const _RestrictedHarness({required this.gate, required this.onResult});
+
+  final Future<bool> Function(BuildContext) gate;
+  final ValueChanged<bool> onResult;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () async {
+            final allowed = await gate(context);
+            onResult(allowed);
+          },
+          child: const Text('abrir'),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _buildRestrictedApp(
+  ProProvider provider,
+  Future<bool> Function(BuildContext) gate,
+  ValueChanged<bool> onResult,
+) =>
+    ChangeNotifierProvider<ProProvider>.value(
+      value: provider,
+      child: MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: _RestrictedHarness(gate: gate, onResult: onResult),
+      ),
+    );
 
 void main() {
   late _FakeProducts products;
@@ -228,5 +272,181 @@ void main() {
 
     expect(provider.esPro, isFalse);
     expect(allowed, isFalse);
+  });
+
+  group('métricas OSA', () {
+    testWidgets('bloquea el módulo y abre el paywall sin licencia PRO',
+        (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowOsaMetrics,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Suscribirme a PRO'),
+        findsOneWidget,
+        reason: 'sin licencia PRO el módulo OSA no se puede abrir',
+      );
+      expect(
+        find.text(
+          'Las métricas OSA y la reposición son exclusivas de BodegaFlow PRO',
+        ),
+        findsOneWidget,
+        reason: 'el paywall explica qué función motivó el bloqueo',
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(allowed, isFalse);
+    });
+
+    testWidgets('deja abrir el módulo con licencia PRO', (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      await settings.set(
+        AppConstants.settingPro,
+        AppConstants.proEnabled,
+      );
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowOsaMetrics,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      expect(allowed, isTrue);
+      expect(find.text('Suscribirme a PRO'), findsNothing,
+          reason: 'con licencia no hay que interrumpir al usuario');
+    });
+
+    testWidgets('deja continuar el módulo si el usuario se suscribe en el paywall',
+        (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowOsaMetrics,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Suscribirme a PRO'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+
+      expect(allowed, isTrue,
+          reason: 'al suscribirse en el paywall la acción se retoma');
+    });
+  });
+
+  group('exportación de reportes PDF', () {
+    testWidgets('bloquea la exportación y abre el paywall sin licencia PRO',
+        (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowPdfExport,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Suscribirme a PRO'), findsOneWidget);
+      expect(
+        find.text('La exportación de reportes PDF es exclusiva de BodegaFlow PRO'),
+        findsOneWidget,
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(allowed, isFalse);
+    });
+
+    testWidgets('deja exportar con licencia PRO', (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      await settings.set(
+        AppConstants.settingPro,
+        AppConstants.proEnabled,
+      );
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowPdfExport,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      expect(allowed, isTrue);
+      expect(find.text('Suscribirme a PRO'), findsNothing);
+    });
+
+    testWidgets('sigue bloqueada si el usuario cierra el paywall sin pagar',
+        (tester) async {
+      useTallViewport(tester);
+      bool? allowed;
+      billing.purchaseResult = const ProPurchaseResult.notFound();
+      final provider = buildProvider();
+      await provider.init();
+
+      await tester.pumpWidget(
+        _buildRestrictedApp(
+          provider,
+          ProGate.allowPdfExport,
+          (value) => allowed = value,
+        ),
+      );
+
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(provider.esPro, isFalse);
+      expect(allowed, isFalse);
+    });
   });
 }

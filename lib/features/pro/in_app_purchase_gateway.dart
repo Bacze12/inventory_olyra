@@ -1,5 +1,6 @@
 import 'package:in_app_purchase/in_app_purchase.dart';
 
+import '../../core/constants/app_constants.dart';
 import 'billing.dart';
 import 'purchase_waiter.dart';
 
@@ -18,7 +19,7 @@ SubscriptionOffer offerFromProductDetails(ProductDetails details) =>
 /// BodegaFlow es 100% offline y no tiene servidor de licencias, así que la
 /// verificación de la compra se apoya en lo que entrega el propio Google Play
 /// Billing: una transacción en estado `purchased` o `restored` para
-/// `bodegaflow_pro_monthly` significa que Google ya cobró y que la
+/// [AppConstants.proProductId] significa que Google ya cobró y que la
 /// suscripción está vigente.
 class InAppPurchaseGateway implements BillingGateway {
   InAppPurchaseGateway({this.client});
@@ -35,7 +36,7 @@ class InAppPurchaseGateway implements BillingGateway {
 
   @override
   Future<List<SubscriptionOffer>> loadOffers() async {
-    final details = await _queryProduct(proProductId);
+    final details = await _queryProduct(AppConstants.proProductId);
     return details.map(offerFromProductDetails).toList();
   }
 
@@ -70,7 +71,7 @@ class InAppPurchaseGateway implements BillingGateway {
     // informa que no hay licencia que restaurar.
     final waiter = _waiter(
       iap,
-      proProductId,
+      AppConstants.proProductId,
       onTimeout: const ProPurchaseResult.notFound(),
     );
     try {
