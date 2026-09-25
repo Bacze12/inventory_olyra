@@ -13,6 +13,27 @@ enum PaywallTrigger {
 
   /// El usuario entró por su cuenta desde Ajustes.
   settings,
+
+  /// El usuario intentó abrir el módulo de métricas OSA sin licencia PRO.
+  osa,
+
+  /// El usuario intentó exportar el reporte en PDF sin licencia PRO.
+  pdfExport,
+}
+
+/// Clave que explica en el paywall qué función se está cobrando, o `null` si
+/// el paywall se abrió por el límite de productos o desde Ajustes (donde el
+/// motivo ya se explica con la tabla comparativa).
+String? lockedFeatureKeyFor(PaywallTrigger trigger) {
+  switch (trigger) {
+    case PaywallTrigger.productLimit:
+    case PaywallTrigger.settings:
+      return null;
+    case PaywallTrigger.osa:
+      return AppStrings.paywallOsaLocked;
+    case PaywallTrigger.pdfExport:
+      return AppStrings.paywallPdfLocked;
+  }
 }
 
 /// Abre el paywall y devuelve `true` si el usuario terminó con licencia PRO.
@@ -88,7 +109,7 @@ const List<_PlanFeature> _features = [
 /// Pantalla de venta de la suscripción BodegaFlow PRO.
 ///
 /// Compara Gratis vs PRO y gatilla el flujo de pago oficial de Google Play con
-/// el producto `bodegaflow_pro_monthly`.
+/// el producto [AppConstants.proProductId].
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key, this.trigger = PaywallTrigger.settings});
 
@@ -120,6 +141,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
     String fill(String key, {Map<String, Object> args = const {}}) =>
         AppStrings.interpolate(languageCode, key, args: args);
 
+    final lockedFeatureKey = lockedFeatureKeyFor(widget.trigger);
+
     return Scaffold(
       appBar: AppBar(title: Text(tr(AppStrings.paywallTitle))),
       body: SafeArea(
@@ -131,6 +154,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
               subtitle: tr(AppStrings.paywallSubtitle),
             ),
             const SizedBox(height: 20),
+            if (lockedFeatureKey != null) ...[
+              _LockedFeatureNotice(text: tr(lockedFeatureKey)),
+              const SizedBox(height: 20),
+            ],
             if (pro.esPro)
               _ProActiveBanner(
                 text: tr(AppStrings.paywallAlreadyPro),
@@ -272,6 +299,41 @@ class _Header extends StatelessWidget {
           style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4),
         ),
       ],
+    );
+  }
+}
+
+/// Explica qué función de PRO el usuario intentó usar sin licencia, para que el
+/// paywall no aparezca "en frío" desde un botón que se veía habilitado.
+class _LockedFeatureNotice extends StatelessWidget {
+  const _LockedFeatureNotice({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: scheme.onSecondaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

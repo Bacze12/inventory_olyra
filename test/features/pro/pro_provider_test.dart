@@ -37,7 +37,7 @@ class _FakeBilling implements BillingGateway {
 
   List<SubscriptionOffer> offers = const [
     SubscriptionOffer(
-      productId: proProductId,
+      productId: AppConstants.proProductId,
       title: 'BodegaFlow PRO',
       description: 'Suscripción mensual',
       price: 'CLP 2.990',

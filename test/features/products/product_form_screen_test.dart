@@ -75,7 +75,7 @@ class _FakeBilling implements BillingGateway {
   @override
   Future<List<SubscriptionOffer>> loadOffers() async => const [
         SubscriptionOffer(
-          productId: 'bodegaflow_pro_monthly',
+          productId: AppConstants.proProductId,
           title: 'BodegaFlow PRO',
           description: 'Suscripción mensual',
           price: 'CLP 2.990',

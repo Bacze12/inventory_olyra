@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/i18n/app_strings.dart';
+import '../osa/osa_metrics_screen.dart';
+import '../pro/pro_gate.dart';
+import '../pro/pro_provider.dart';
 import '../products/product_list_screen.dart';
 import '../printer/printer_screen.dart';
 import '../products/product_provider.dart';
@@ -32,6 +35,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!context.mounted) return;
     context.read<ProductProvider>().load();
+  }
+
+  /// Abre un módulo exclusivo de PRO: sin licencia el usuario aterriza en el
+  /// paywall y el módulo no llega a construirse.
+  Future<void> _pushProOnly(
+    BuildContext context,
+    Future<bool> Function(BuildContext) gate,
+    Widget screen,
+  ) async {
+    if (!await gate(context)) return;
+    if (!context.mounted) return;
+    await _push(context, screen);
   }
 
   @override
@@ -111,6 +126,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: tr(AppStrings.homeScanner),
                   subtitle: tr(AppStrings.homeScannerSubtitle),
                   onTap: () => _push(context, const ScannerScreen()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MenuTile(
+                  icon: Icons.insights_outlined,
+                  title: tr(AppStrings.homeOsa),
+                  subtitle: tr(AppStrings.homeOsaSubtitle),
+                  proOnly: true,
+                  onTap: () => _pushProOnly(
+                    context,
+                    ProGate.allowOsaMetrics,
+                    const OsaMetricsScreen(),
+                  ),
                 ),
               ),
             ],
@@ -227,6 +260,7 @@ class _MenuTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.proOnly = false,
   });
 
   final IconData icon;
@@ -234,9 +268,16 @@ class _MenuTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
+  /// `true` en las funciones que el paywall vende como exclusivas de PRO. La
+  /// tarjeta se sigue mostrando en la versión gratuita (para que el usuario
+  /// sepa que existen), pero con el candado que anuncia el paywall.
+  final bool proOnly;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final locked = proOnly && !context.watch<ProProvider>().esPro;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -251,7 +292,15 @@ class _MenuTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 32, color: scheme.primary),
+              Row(
+                children: [
+                  Icon(icon, size: 32, color: scheme.primary),
+                  if (locked) ...[
+                    const SizedBox(width: 8),
+                    const _ProLockBadge(),
+                  ],
+                ],
+              ),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -268,6 +317,41 @@ class _MenuTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Candado con el distintivo PRO que anticipa el paywall del menú.
+class _ProLockBadge extends StatelessWidget {
+  const _ProLockBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      key: const Key('menuProBadge'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 12, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 4),
+          Text(
+            AppStrings.translate(languageCode, AppStrings.proBadge),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSecondaryContainer,
+            ),
+          ),
+        ],
       ),
     );
   }
