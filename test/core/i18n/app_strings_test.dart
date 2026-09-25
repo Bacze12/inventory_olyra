@@ -29,6 +29,33 @@ void main() {
         'clave.inexistente');
   });
 
+  test('el botón de exportar reporte está traducido en ambos idiomas', () {
+    expect(
+      AppStrings.translate(AppStrings.es, AppStrings.reportGeneratePdf),
+      'Generar reporte PDF',
+    );
+    expect(
+      AppStrings.translate(AppStrings.en, AppStrings.reportGeneratePdf),
+      isNot('Generar reporte PDF'),
+      reason: 'en inglés la etiqueta tiene que estar traducida, no copiada del ES',
+    );
+    expect(
+      AppStrings.translate(AppStrings.en, AppStrings.reportGeneratePdf),
+      'Generate PDF report',
+    );
+  });
+
+  test('la impresión de etiquetas se anuncia como incluida en ambos planes', () {
+    expect(
+      AppStrings.translate(AppStrings.es, AppStrings.paywallFeatureLabels),
+      'Impresión de etiquetas',
+    );
+    expect(
+      AppStrings.translate(AppStrings.en, AppStrings.paywallFeatureLabels),
+      'Label printing',
+    );
+  });
+
   test('interpolate reemplaza los parámetros en la traducción', () {
     expect(
       AppStrings.interpolate(

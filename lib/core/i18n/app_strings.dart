@@ -40,6 +40,7 @@ class AppStrings {
   static const String osaSubtitle = 'osa.subtitle';
   static const String osaPendingTitle = 'osa.pending.title';
   static const String osaPendingBody = 'osa.pending.body';
+  static const String reportGeneratePdf = 'report.generatePdf';
   static const String paywallTitle = 'paywall.title';
   static const String paywallHeadline = 'paywall.headline';
   static const String paywallSubtitle = 'paywall.subtitle';
@@ -66,6 +67,7 @@ class AppStrings {
   static const String paywallFeatureProducts = 'paywall.feature.products';
   static const String paywallFeatureScanner = 'paywall.feature.scanner';
   static const String paywallFeatureLowStock = 'paywall.feature.lowStock';
+  static const String paywallFeatureLabels = 'paywall.feature.labels';
   static const String paywallFeatureOsa = 'paywall.feature.osa';
   static const String paywallFeaturePdf = 'paywall.feature.pdf';
   static const String paywallValueUpTo = 'paywall.value.upTo';
@@ -108,6 +110,7 @@ class AppStrings {
       osaPendingBody:
           'Tu licencia PRO está activa. Los indicadores de disponibilidad en '
               'anaquel se habilitan en la próxima actualización.',
+      reportGeneratePdf: 'Generar reporte PDF',
       paywallTitle: 'BodegaFlow PRO',
       paywallHeadline: 'Tu bodega, sin límites',
       paywallSubtitle:
@@ -143,6 +146,7 @@ class AppStrings {
       paywallFeatureProducts: 'Productos en el catálogo',
       paywallFeatureScanner: 'Lector de códigos y QR',
       paywallFeatureLowStock: 'Alertas de stock bajo',
+      paywallFeatureLabels: 'Impresión de etiquetas',
       paywallFeatureOsa: 'Métricas OSA y reposición',
       paywallFeaturePdf: 'Exportación de reportes PDF',
       paywallValueUpTo: 'Hasta {limit}',
@@ -184,6 +188,7 @@ class AppStrings {
       osaPendingBody:
           'Your PRO license is active. The on-shelf availability indicators are '
               'enabled in the next update.',
+      reportGeneratePdf: 'Generate PDF report',
       paywallTitle: 'BodegaFlow PRO',
       paywallHeadline: 'Your store, no limits',
       paywallSubtitle:
@@ -218,6 +223,7 @@ class AppStrings {
       paywallFeatureProducts: 'Catalog products',
       paywallFeatureScanner: 'Barcode & QR scanner',
       paywallFeatureLowStock: 'Low stock alerts',
+      paywallFeatureLabels: 'Label printing',
       paywallFeatureOsa: 'On-shelf availability metrics',
       paywallFeaturePdf: 'PDF report export',
       paywallValueUpTo: 'Up to {limit}',

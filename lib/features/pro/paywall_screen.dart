@@ -90,6 +90,15 @@ const List<_PlanFeature> _features = [
     proKey: AppStrings.paywallValueIncluded,
     icon: Icons.notifications_active_outlined,
   ),
+  // La impresión de etiquetas se mantiene en el plan gratuito (ver docs/ROADMAP.md):
+  // es el flujo con el que la bodega entra a la app, así que queda como "incluido"
+  // en los dos planes y no se marca como beneficio de PRO.
+  _PlanFeature(
+    titleKey: AppStrings.paywallFeatureLabels,
+    freeKey: AppStrings.paywallValueIncluded,
+    proKey: AppStrings.paywallValueIncluded,
+    icon: Icons.local_printshop_outlined,
+  ),
   _PlanFeature(
     titleKey: AppStrings.paywallFeatureOsa,
     freeKey: AppStrings.paywallValueLocked,

@@ -191,8 +191,36 @@ void main() {
     expect(find.text('Productos en el catálogo'), findsOneWidget);
     expect(find.text('Lector de códigos y QR'), findsOneWidget);
     expect(find.text('Alertas de stock bajo'), findsOneWidget);
+    expect(find.text('Impresión de etiquetas'), findsOneWidget,
+        reason: 'la impresión de etiquetas sigue siendo gratis y se anuncia');
     expect(find.text('Métricas OSA y reposición'), findsOneWidget);
     expect(find.text('Exportación de reportes PDF'), findsOneWidget);
+  });
+
+  testWidgets('mantiene la impresión de etiquetas fuera del cobro de PRO',
+      (tester) async {
+    useTallViewport(tester);
+    final provider = buildProvider();
+    await provider.init();
+
+    await tester.pumpWidget(_buildPaywall(provider));
+    await tester.pumpAndSettle();
+
+    final labelsRow = find.ancestor(
+      of: find.text('Impresión de etiquetas'),
+      matching: find.byType(Row),
+    );
+
+    expect(
+      find.descendant(of: labelsRow, matching: find.text('Completo')),
+      findsNWidgets(2),
+      reason: 'Gratis y PRO ofrecen las etiquetas: la fila no lleva tachado',
+    );
+    expect(
+      find.descendant(of: labelsRow, matching: find.text('Bloqueado')),
+      findsNothing,
+      reason: 'las etiquetas no son un argumento de venta de la suscripción',
+    );
   });
 
   testWidgets('el plan gratuito muestra los límites de la versión Free',
@@ -451,5 +479,6 @@ void main() {
     expect(find.text('Upgrade to PRO'), findsOneWidget);
     expect(find.text('You have 30 of 30 free products left'), findsOneWidget);
     expect(find.text('On-shelf availability metrics'), findsOneWidget);
+    expect(find.text('Label printing'), findsOneWidget);
   });
 }
