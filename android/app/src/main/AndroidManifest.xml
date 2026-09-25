@@ -7,6 +7,9 @@
     <!-- Geolocation: requerida por el scanner ML Kit agrupado en algunos dispositivos -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Suscripción PRO (in_app_purchase / Google Play Billing) -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+
     <!-- El plugin ota_update declara REQUEST_INSTALL_PACKAGES en su propio
          manifest; lo forzamos a eliminarse del manifest mergeado. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"

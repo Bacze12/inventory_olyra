@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../data/models/product.dart';
+import '../pro/pro_gate.dart';
+import '../pro/pro_provider.dart';
 import '../scanner/barcode_capture_screen.dart';
 import 'product_provider.dart';
 
@@ -56,6 +58,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   bool get _isEditing => widget.product != null;
+
+  /// En la versión gratuita el catálogo se detiene en 30 productos. La
+  /// suscripción PRO elimina ese tope; editar un producto existente nunca se
+  /// bloquea porque no agranda el catálogo.
+  bool get _isLimitedToFreePlan =>
+      !_isEditing && !context.read<ProProvider>().esPro;
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +187,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final provider = context.read<ProductProvider>();
 
     setState(() => _saving = true);
+
+    // Regla Freemium: sin licencia PRO y con el catálogo lleno, el guardado se
+    // detiene y se ofrece la suscripción.
+    if (_isLimitedToFreePlan) {
+      final allowed = await ProGate.allowNewProduct(context);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (!allowed) return;
+    }
+
     final base = widget.product;
     final now = nowIso();
     final draft = Product(
