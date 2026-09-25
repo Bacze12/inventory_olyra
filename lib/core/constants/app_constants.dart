@@ -9,6 +9,18 @@ class AppConstants {
   static const String settingLanguage = 'language';
   static const String defaultLanguage = 'es';
 
+  /// Suscripción PRO publicada en Google Play. Debe coincidir exactamente con
+  /// el ID configurado en Play Console.
+  static const String proProductId = 'bodegaflow_pro_monthly';
+
+  /// Clave de la tabla `settings` donde queda marcada la licencia PRO.
+  static const String settingPro = 'pro_active';
+  static const String proEnabled = 'true';
+
+  ///Máximo de productos del catálogo en la versión gratuita. Agotado este
+  /// cupo, el alta de un producto nuevo se detiene y se ofrece el paywall.
+  static const int freeProductLimit = 30;
+
   /// Silencio total tras cada conteo: evita dobles sumas al sostener el producto.
   static const Duration applyLockout = Duration(milliseconds: 600);
 

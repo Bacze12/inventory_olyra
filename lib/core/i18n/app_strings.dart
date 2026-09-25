@@ -30,6 +30,41 @@ class AppStrings {
   static const String settingsLegal = 'settings.legal';
   static const String settingsPrivacy = 'settings.privacy';
   static const String settingsTerms = 'settings.terms';
+  static const String settingsPlan = 'settings.plan';
+  static const String settingsPlanFree = 'settings.plan.free';
+  static const String settingsPlanPro = 'settings.plan.pro';
+  static const String paywallTitle = 'paywall.title';
+  static const String paywallHeadline = 'paywall.headline';
+  static const String paywallSubtitle = 'paywall.subtitle';
+  static const String paywallFreeUsage = 'paywall.freeUsage';
+  static const String paywallFreeUsagePro = 'paywall.freeUsage.pro';
+  static const String paywallLimitReached = 'paywall.limitReached';
+  static const String paywallColumnFeature = 'paywall.column.feature';
+  static const String paywallColumnFree = 'paywall.column.free';
+  static const String paywallColumnPro = 'paywall.column.pro';
+  static const String paywallBuy = 'paywall.buy';
+  static const String paywallRestore = 'paywall.restore';
+  static const String paywallAlreadyPro = 'paywall.alreadyPro';
+  static const String paywallClose = 'paywall.close';
+  static const String paywallPriceLoading = 'paywall.price.loading';
+  static const String paywallPriceUnavailable = 'paywall.price.unavailable';
+  static const String paywallLegal = 'paywall.legal';
+  static const String paywallNoticePurchased = 'paywall.notice.purchased';
+  static const String paywallNoticePending = 'paywall.notice.pending';
+  static const String paywallNoticePrice = 'paywall.notice.price';
+  static const String paywallNoticeFailed = 'paywall.notice.failed';
+  static const String paywallNoticeNothingToRestore = 'paywall.notice.restore';
+  static const String paywallFeatureProducts = 'paywall.feature.products';
+  static const String paywallFeatureScanner = 'paywall.feature.scanner';
+  static const String paywallFeatureLowStock = 'paywall.feature.lowStock';
+  static const String paywallFeatureOsa = 'paywall.feature.osa';
+  static const String paywallFeaturePdf = 'paywall.feature.pdf';
+  static const String paywallValueUpTo = 'paywall.value.upTo';
+  static const String paywallValueUnlimited = 'paywall.value.unlimited';
+  static const String paywallValueIncluded = 'paywall.value.included';
+  static const String paywallValueLocked = 'paywall.value.locked';
+  static const String paywallValueAdvanced = 'paywall.value.advanced';
+  static const String paywallValueComplete = 'paywall.value.complete';
 
   static const Map<String, Map<String, String>> translations = {
     es: {
@@ -52,6 +87,48 @@ class AppStrings {
       settingsLegal: 'Privacidad y Términos',
       settingsPrivacy: 'Política de Privacidad',
       settingsTerms: 'Términos y Condiciones',
+      settingsPlan: 'Plan',
+      settingsPlanFree: 'Gratis',
+      settingsPlanPro: 'BodegaFlow PRO',
+      paywallTitle: 'BodegaFlow PRO',
+      paywallHeadline: 'Tu bodega, sin límites',
+      paywallSubtitle:
+          'BodegaFlow PRO está pensado para el pequeño comercio que ya grewció '
+              'y necesita saber qué falta reponer en la bodega y en el anaquel.',
+      paywallFreeUsage: 'Te quedan {count} de {limit} productos gratis',
+      paywallFreeUsagePro: 'Tienes BodegaFlow PRO activo: productos ilimitados',
+      paywallLimitReached:
+          'Alcanzaste el límite de {limit} productos en la versión gratis',
+      paywallColumnFeature: 'Función',
+      paywallColumnFree: 'Gratis',
+      paywallColumnPro: 'PRO',
+      paywallBuy: 'Suscribirme a PRO',
+      paywallRestore: 'Restaurar compras',
+      paywallAlreadyPro: 'Ya tienes BodegaFlow PRO',
+      paywallClose: 'Continuar',
+      paywallPriceLoading: 'Consultando precio en Google Play…',
+      paywallPriceUnavailable: 'Precio no disponible',
+      paywallLegal:
+          'Suscripción mensual administrada por Google Play. Se renueva '
+              'automáticamente hasta que la canceles desde los ajustes de tu '
+              'cuenta de Google.',
+      paywallNoticePurchased: '¡Listo! Ya tienes BodegaFlow PRO',
+      paywallNoticePending: 'La compra quedó pendiente de confirmación',
+      paywallNoticePrice: 'No pudimos consultar el precio en Google Play',
+      paywallNoticeFailed: 'No se pudo completar la compra',
+      paywallNoticeNothingToRestore:
+          'No encontramos ninguna compra activa en Google Play',
+      paywallFeatureProducts: 'Productos en el catálogo',
+      paywallFeatureScanner: 'Lector de códigos y QR',
+      paywallFeatureLowStock: 'Alertas de stock bajo',
+      paywallFeatureOsa: 'Métricas OSA y reposición',
+      paywallFeaturePdf: 'Exportación de reportes PDF',
+      paywallValueUpTo: 'Hasta {limit}',
+      paywallValueUnlimited: 'Ilimitados',
+      paywallValueIncluded: 'Completo',
+      paywallValueLocked: 'Bloqueado',
+      paywallValueAdvanced: 'Avanzado',
+      paywallValueComplete: 'Completo',
     },
     en: {
       appName: 'Inventory',
@@ -73,6 +150,48 @@ class AppStrings {
       settingsLegal: 'Privacy & Terms',
       settingsPrivacy: 'Privacy Policy',
       settingsTerms: 'Terms & Conditions',
+      settingsPlan: 'Plan',
+      settingsPlanFree: 'Free',
+      settingsPlanPro: 'BodegaFlow PRO',
+      paywallTitle: 'BodegaFlow PRO',
+      paywallHeadline: 'Your store, no limits',
+      paywallSubtitle:
+          'BodegaFlow PRO is built for small shops that already outgrew '
+              'spreadsheets and need to know what to restock in the stockroom '
+              'and on the shelf.',
+      paywallFreeUsage: 'You have {count} of {limit} free products left',
+      paywallFreeUsagePro: 'BodegaFlow PRO is active: unlimited products',
+      paywallLimitReached:
+          'You reached the {limit} product limit of the free version',
+      paywallColumnFeature: 'Feature',
+      paywallColumnFree: 'Free',
+      paywallColumnPro: 'PRO',
+      paywallBuy: 'Upgrade to PRO',
+      paywallRestore: 'Restore purchases',
+      paywallAlreadyPro: 'You already have BodegaFlow PRO',
+      paywallClose: 'Continue',
+      paywallPriceLoading: 'Fetching price on Google Play…',
+      paywallPriceUnavailable: 'Price unavailable',
+      paywallLegal:
+          'Monthly subscription handled by Google Play. It renews automatically '
+              'until you cancel it from your Google account settings.',
+      paywallNoticePurchased: 'All set! You now have BodegaFlow PRO',
+      paywallNoticePending: 'The purchase is still pending confirmation',
+      paywallNoticePrice: 'We could not fetch the price from Google Play',
+      paywallNoticeFailed: 'The purchase could not be completed',
+      paywallNoticeNothingToRestore:
+          'We found no active purchase on Google Play',
+      paywallFeatureProducts: 'Catalog products',
+      paywallFeatureScanner: 'Barcode & QR scanner',
+      paywallFeatureLowStock: 'Low stock alerts',
+      paywallFeatureOsa: 'On-shelf availability metrics',
+      paywallFeaturePdf: 'PDF report export',
+      paywallValueUpTo: 'Up to {limit}',
+      paywallValueUnlimited: 'Unlimited',
+      paywallValueIncluded: 'Included',
+      paywallValueLocked: 'Locked',
+      paywallValueAdvanced: 'Advanced',
+      paywallValueComplete: 'Full',
     },
   };
 

@@ -4,12 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/i18n/app_strings.dart';
+import '../pro/paywall_screen.dart';
+import '../pro/pro_provider.dart';
 import 'language_provider.dart';
 
 typedef LinkOpener = Future<void> Function(Uri url);
 
-/// Panel de ajustes con el selector de idioma (español / inglés) y un acceso
-/// a los enlaces de privacidad y términos.
+/// Panel de ajustes con el selector de idioma (español / inglés), el estado del
+/// plan Free/PRO y un acceso a los enlaces de privacidad y términos.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, this.linkOpener});
 
@@ -29,6 +31,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = context.watch<LanguageProvider>();
+    final pro = context.watch<ProProvider>();
     final scheme = Theme.of(context).colorScheme;
 
     String tr(String key) => AppStrings.translate(language.languageCode, key);
@@ -73,6 +76,42 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
+            tr(AppStrings.settingsPlan),
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: scheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _PlanTile(
+              label: pro.esPro
+                  ? tr(AppStrings.settingsPlanPro)
+                  : tr(AppStrings.settingsPlanFree),
+              detail: pro.esPro
+                  ? null
+                  : AppStrings.interpolate(
+                      language.languageCode,
+                      AppStrings.paywallFreeUsage,
+                      args: {
+                        'count': pro.remainingFreeSlots ?? 0,
+                        'limit': AppConstants.freeProductLimit,
+                      },
+                    ),
+              onTap: () => showPaywall(
+                context,
+                trigger: PaywallTrigger.settings,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
             tr(AppStrings.settingsLegal),
             style: TextStyle(
               color: scheme.onSurfaceVariant,
@@ -104,6 +143,55 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlanTile extends StatelessWidget {
+  const _PlanTile({
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final String label;
+  final String? detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(Icons.workspace_premium, color: scheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (detail != null)
+                    Text(
+                      detail!,
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }
