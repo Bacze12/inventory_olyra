@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/product.dart';
+import '../pro/pro_provider.dart';
 import 'product_form_screen.dart';
 import 'product_provider.dart';
 import 'widgets/product_card.dart';
@@ -174,10 +175,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
     if (confirmed == true) {
       if (!context.mounted) return false;
       final error = await context.read<ProductProvider>().delete(product);
+      if (!context.mounted) return false;
       if (error != null) {
         messenger.showSnackBar(SnackBar(content: Text(error)));
         return false;
       }
+      // Borrar también devuelve un cupo al plan gratuito, así que el contador
+      // de la cuota se recalcula junto con la lista.
+      await context.read<ProProvider>().refreshProductCount();
       messenger.showSnackBar(
         SnackBar(content: Text('"${product.name}" eliminado')),
       );

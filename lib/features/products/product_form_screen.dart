@@ -217,6 +217,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       messenger.showSnackBar(SnackBar(content: Text(error)));
       return;
     }
+
+    // El catálogo cambió, así que el cupo que muestran el paywall y los ajustes
+    // se recalcula ahora: si se dejara para la próxima apertura, el indicador
+    // seguiría mostrando el conteo anterior.
+    await context.read<ProProvider>().refreshProductCount();
+    if (!mounted) return;
     Navigator.of(context).pop(true);
   }
 }
