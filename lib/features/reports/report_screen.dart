@@ -111,6 +111,7 @@ class _ReportScreenState extends State<ReportScreen> {
     final provider = context.watch<ReportProvider>();
     final pro = context.watch<ProProvider>();
     final hasReport = _bytes != null;
+    final languageCode = Localizations.localeOf(context).languageCode;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Reporte de inventario')),
@@ -140,7 +141,12 @@ class _ReportScreenState extends State<ReportScreen> {
                       : FilledButton.icon(
                           onPressed: _generate,
                           icon: const Icon(Icons.download_done_outlined),
-                          label: const Text('Generar reporte PDF'),
+                          label: Text(
+                            AppStrings.translate(
+                              languageCode,
+                              AppStrings.reportGeneratePdf,
+                            ),
+                          ),
                         ),
                 ),
                 if (!pro.esPro) ...[

@@ -83,14 +83,18 @@ class _FakeBilling implements BillingGateway {
 
 /// El provider va por encima del [MaterialApp] para que el paywall, que se
 /// empuja como ruta nueva, también herede la licencia.
-Widget _buildApp(ProProvider pro, ReportProvider report) =>
+Widget _buildApp(
+  ProProvider pro,
+  ReportProvider report, {
+  Locale locale = const Locale('es'),
+}) =>
     MultiProvider(
       providers: [
         ChangeNotifierProvider<ProProvider>.value(value: pro),
         ChangeNotifierProvider<ReportProvider>.value(value: report),
       ],
       child: MaterialApp(
-        locale: const Locale('es'),
+        locale: locale,
         supportedLocales: AppStrings.supportedLocales,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
@@ -210,5 +214,71 @@ void main() {
 
     expect(find.byKey(const Key('reportProBadge')), findsNothing,
         reason: 'con licencia activa el aviso de bloqueo sobra');
+  });
+
+  testWidgets('la etiqueta del botón de exportar sale de AppStrings',
+      (tester) async {
+    useTallViewport(tester);
+    final pro = buildPro();
+    await pro.init();
+    final report = buildReport();
+    await report.init();
+
+    await tester.pumpWidget(
+      _buildApp(pro, report, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        AppStrings.translate(
+          AppStrings.en,
+          AppStrings.reportGeneratePdf,
+        ),
+      ),
+      findsOneWidget,
+      reason: 'el botón tiene que traducirse con el idioma activo',
+    );
+    expect(
+      find.text(
+        AppStrings.translate(
+          AppStrings.es,
+          AppStrings.reportGeneratePdf,
+        ),
+      ),
+      findsNothing,
+      reason: 'queda un solo literal en AppStrings, no uno por idioma en la vista',
+    );
+  });
+
+  testWidgets('el botón traducido sigue disparando la protección de PRO',
+      (tester) async {
+    useTallViewport(tester);
+    final pro = buildPro();
+    await pro.init();
+    final report = buildReport();
+    await report.init();
+
+    await tester.pumpWidget(
+      _buildApp(pro, report, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.text(
+        AppStrings.translate(
+          AppStrings.en,
+          AppStrings.reportGeneratePdf,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Upgrade to PRO'), findsOneWidget,
+        reason: 'el botón traducido tiene que seguir abriendo el paywall');
+    expect(
+      find.text('PDF report export is exclusive to BodegaFlow PRO'),
+      findsOneWidget,
+    );
   });
 }
