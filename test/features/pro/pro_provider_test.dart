@@ -206,6 +206,41 @@ void main() {
     expect(notifications, greaterThan(0));
   });
 
+  test('refreshProductCount descuenta el cupo al guardar un producto nuevo',
+      () async {
+    final provider = buildProvider();
+    await provider.init();
+    expect(provider.remainingFreeSlots, AppConstants.freeProductLimit);
+
+    await seedProducts(1);
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    await provider.refreshProductCount();
+
+    expect(provider.productCount, 1);
+    expect(provider.remainingFreeSlots, AppConstants.freeProductLimit - 1,
+        reason: 'el cupo libre debe bajar apenas el catálogo crece');
+    expect(notifications, greaterThan(0),
+        reason: 'la UI se entera del nuevo conteo por notifyListeners');
+  });
+
+  test('refreshProductCount libera el cupo al eliminar un producto', () async {
+    await seedProducts(30);
+    final provider = buildProvider();
+    await provider.init();
+    expect(provider.remainingFreeSlots, 0);
+    expect(await provider.canRegisterProduct(), isFalse);
+
+    final catalog = await products.all();
+    await products.delete(catalog.first.id!);
+    await provider.refreshProductCount();
+
+    expect(provider.productCount, 29);
+    expect(provider.remainingFreeSlots, 1);
+    expect(await provider.canRegisterProduct(), isTrue,
+        reason: 'eliminar un producto devuelve un cupo al plan gratuito');
+  });
+
   test('purchasePro compra la suscripción publicada por la tienda', () async {
     final provider = buildProvider();
     await provider.init();

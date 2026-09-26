@@ -9,6 +9,7 @@ import 'package:scanflow/data/models/product.dart';
 import 'package:scanflow/data/repositories/product_repository.dart';
 import 'package:scanflow/data/repositories/settings_repository.dart';
 import 'package:scanflow/features/pro/billing.dart';
+import 'package:scanflow/features/pro/paywall_screen.dart';
 import 'package:scanflow/features/pro/pro_provider.dart';
 import 'package:scanflow/features/products/product_form_screen.dart';
 import 'package:scanflow/features/products/product_provider.dart';
@@ -125,6 +126,60 @@ Widget _buildApp({required ProductProvider products, Product? existing}) =>
         GlobalCupertinoLocalizations.delegate,
       ],
       home: _FormHarness(products: products, existing: existing),
+    );
+
+/// Reproduce el recorrido real: la pantalla de catálogo empuja el formulario y
+/// el paywall, y ambos heredan los providers que están por encima del
+/// [MaterialApp].
+class _CatalogHarness extends StatelessWidget {
+  const _CatalogHarness();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).push<bool>(
+                MaterialPageRoute(builder: (_) => const ProductFormScreen()),
+              ),
+              child: const Text('abrir'),
+            ),
+            ElevatedButton(
+              onPressed: () => showPaywall(
+                context,
+                trigger: PaywallTrigger.settings,
+              ),
+              child: const Text('contador'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget _buildCatalogApp({
+  required ProductProvider products,
+  required ProProvider pro,
+}) =>
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ProductProvider>.value(value: products),
+        ChangeNotifierProvider<ProProvider>.value(value: pro),
+      ],
+      child: MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const _CatalogHarness(),
+      ),
     );
 
 void main() {
@@ -285,5 +340,75 @@ void main() {
 
     expect(repository.inserted, hasLength(1));
     expect(find.text('Suscribirme a PRO'), findsNothing);
+  });
+
+  testWidgets('tras registrar un producto el contador de la UI se actualiza',
+      (tester) async {
+    useTallViewport(tester);
+    repository.total = 12;
+    await pro.init();
+    expect(pro.remainingFreeSlots, 18);
+
+    await tester.pumpWidget(
+      _buildCatalogApp(products: products, pro: pro),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    await fillForm(tester);
+    await tapSave(tester);
+
+    expect(repository.inserted, hasLength(1));
+    expect(pro.productCount, 13,
+        reason: 'el conteo debe incluir el producto recién creado');
+    expect(pro.remainingFreeSlots, 17);
+
+    await tester.tap(find.text('contador'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Te quedan 17 de 30 productos gratis'), findsOneWidget,
+        reason: 'el indicador no puede seguir mostrando el conteo anterior');
+    final bar = tester
+        .widget<LinearProgressIndicator>(
+            find.byType(LinearProgressIndicator).first)
+        .value;
+    expect(bar, closeTo(13 / 30, 0.0001),
+        reason: 'la barra de cuota refleja 13 usados sobre 30 permitidos');
+  });
+
+  testWidgets('editar un producto no consume un cupo libre', (tester) async {
+    useTallViewport(tester);
+    repository.total = 5;
+    await pro.init();
+    final existing = Product(
+      id: 7,
+      name: 'Leche',
+      barcode: '7801234000007',
+      quantity: 4,
+      minStock: 2,
+      createdAt: '2026-01-01T00:00:00.000',
+      updatedAt: '2026-01-01T00:00:00.000',
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ProProvider>.value(value: pro),
+        ],
+        child: _buildApp(products: products, existing: existing),
+      ),
+    );
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nombre'), 'Leche entera');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repository.updated, hasLength(1));
+    expect(pro.productCount, 5,
+        reason: 'editar no agranda el catálogo, así que el cupo no se consume');
+    expect(pro.remainingFreeSlots, 25);
   });
 }
